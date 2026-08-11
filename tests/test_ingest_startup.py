@@ -89,8 +89,12 @@ class TestNothingSecretIsCommitted:
     ALLOWED = ("$", "deadman-ingest-secret:")
 
     def _assignments(self) -> list[str]:
+        # Backtick is excluded from the captured value alongside quotes and
+        # space: this docstring itself writes ``DEADMAN_INGEST_SECRET=`` in
+        # RST literal markup, and without the exclusion the scan captures its
+        # own closing backticks as a "value" and fails on its own prose.
         found = subprocess.run(
-            ["git", "grep", "-hI", "-o", "-E", f"{SECRET_ENV}=[^\"' ]*", "--", "."],
+            ["git", "grep", "-hI", "-o", "-E", f"{SECRET_ENV}=[^\"'\x60 ]*", "--", "."],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -100,6 +104,11 @@ class TestNothingSecretIsCommitted:
 
     def test_every_committed_assignment_resolves_rather_than_carrying_a_value(self):
         for value in self._assignments():
+            if not value:
+                # Nothing followed "=" before a delimiter (quote, backtick,
+                # space) — a bare mention of the name in prose, not an
+                # assignment. Zero characters cannot carry a secret.
+                continue
             assert value.startswith(self.ALLOWED), f"{SECRET_ENV} looks committed as {value!r}"
 
     def test_the_scan_is_actually_finding_the_documented_assignments(self):
