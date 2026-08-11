@@ -18,10 +18,10 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, and DM1.9 are `done`. DM1.8 is
+DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, DM1.9 and DM1.10 are `done`. DM1.8 is
 `blocked` on a live GCP deploy step this session cannot perform (see Blockers).
-With DM1.6 landed, **DM1.7 (verification loop, P0) is unblocked**, as is
-DM1.10 (correlation); DM1.11 still waits on DM1.8.
+**DM1.7 (verification loop, P0) is the only unblocked task left**; DM1.11 still
+waits on DM1.8, and DM1.12 waits on everything.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -29,7 +29,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.6 and DM1.9 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.6, DM1.9 and DM1.10 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -42,7 +42,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
 | DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
-| DM1.10 | Cross-surface correlation | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
+| DM1.10 | Cross-surface correlation ✓ | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
 | DM1.11 | Self-liveness + out-of-band alerting | P1 | 25 | claude-sonnet-5 | DM1.8 |
 | DM1.12 | Integration gate: demo, README, diagram | P0 | 30 | claude-opus-5 | all |
 
@@ -57,6 +57,72 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.10 cross-surface correlation (`/start-task DM1.10`)
+
+- **The question this turned on:** co-occurrence is nearly worthless as
+  evidence, so what actually establishes that two faults are related? Every
+  probe in a sweep runs within milliseconds of every other, so two faults share
+  a `read_at` whether or not they share a cause — and `read_at` is when *we
+  looked*, not when the fault began. Treating that agreement as evidence would
+  be numerology. So the window **proposes and the cited evidence disposes**:
+  `correlate/window.py` decides which faults are worth one question and
+  contributes *nothing* to confidence; membership in the incident is read off
+  the citations, never off the window.
+- **The gate that makes this more than a time-bucket:** a relationship requires
+  quoted evidence from two or more *faulting* surfaces. `grounded-disk-only` is
+  the test that proves it — a perfectly good grounded diagnosis over the same
+  three co-occurring rows, which happens to be a diagnosis *about the disk*.
+  Three broken things in one window, no correlation.
+- **Blindness is never a leg, enforced twice.** A lone fault beside an
+  `UNOBSERVABLE` row is not a candidate, and — separately, because the model
+  chooses what it cites — a grounded hypothesis that ties a fault to a blind
+  surface is not a correlation. New recording `grounded-blind-relay-tie` is
+  exactly that: fully grounded, quotes the disk trend *and* the relay's own
+  "cannot observe", two surfaces, two citations, one tidy story, refused. A
+  relay we could not reach cannot corroborate anything.
+- **Confidence is carried, not recomputed.** The incident's number is the
+  diagnosis's own capped number. The flagship case lands at 0.4 from a claimed
+  0.7 — because the tie to the scheduler runs through a `REPORTED` row — and
+  both numbers are rendered, so the cap reads as a cap rather than a quiet
+  subtraction. What the incident *doesn't* explain is a listed section, not a
+  discount: folding "we could not see the relay" into a smaller number would
+  tell a reader we were less sure and never tell them of what.
+- **`Basis.INFERRED` is a field and a rendered sentence**, interpolated with
+  the surfaces no edge was found between and stating what inference costs ("can
+  be wrong in ways a declared dependency edge cannot"). A canned sentence stops
+  being read after the second report. `Basis.TRAVERSED` exists so a stored
+  incident can say which kind of claim it is; a test pins that nothing here can
+  emit one.
+- **Three statuses again.** `UNCORRELATED` ("we got an answer, it tied
+  nothing") never collapses into `UNAVAILABLE` ("we could not get an answer") —
+  an operator told "uncorrelated" concludes we checked. An unestablished
+  candidate still returns an incident listing every surface as unexplained: the
+  faults were real and simultaneous, and returning nothing would erase that.
+- **No new prompt.** The diagnosis prompt already asks for one causal
+  hypothesis over a pile of evidence, which is the question correlation needs;
+  a second would be a second thing to keep grounded and a second
+  `PROMPT_VERSION` to keep honest, for nothing.
+- **All ten guards mutation-checked**, not assumed from a green first run —
+  each inversion (cross-surface requirement, blind-as-leg at both stages,
+  cluster gap, `MIN_CORRELATED_SURFACES`, the UNAVAILABLE/UNCORRELATED split,
+  the ungrounded branch, unexplained-dropping, the zero-confidence render, the
+  `Incident` invariant) broke a specific named test. `PYTHONDONTWRITEBYTECODE=1`
+  throughout, per the stale-`.pyc` trap recorded under DM1.6.
+- **One trap found and closed while doing it:** the two "grounded but still
+  uncorrelated" tests would also pass if the evidence-id scheme drifted, since
+  an ungrounded answer yields `UNCORRELATED` too — they would then prove only
+  that a broken citation is rejected, which is another layer's test. Both now
+  assert the fixture is `GROUNDED` first. `test_diagnose.py`'s id pin only
+  covers the disk and Metricool ids, not `sms:relay`'s.
+- Files: `src/deadman/correlate/{__init__,window,incident,engine,report}.py`,
+  `tests/test_correlate_{window,engine,incident,report}.py`, one recording
+  (+ README section), `docs/ARCHITECTURE.md`.
+- Gates: `pytest tests/` 192/192 (up from 158); `ruff check .` clean;
+  `bpsai-pair arch check --strict` clean.
+- **Not wired into `service.py`, same reason as DM1.6.** Correlation needs a
+  model client and the endpoint holds no credentials. DM1.12 is the call site
+  that has both; `report.as_dict` is board-shaped and ready for it.
 
 ### Session: 2026-08-11 — DM1.6 remediation registry and executor (`/start-task DM1.6`)
 
@@ -466,10 +532,12 @@ retiring the seven existing point-solution monitors.
    `RemediationPlan.evidence_ids` names the surfaces to re-observe, and
    `test_an_action_result_does_not_claim_the_fault_is_fixed` pins the field set
    so no future edit lets the executor declare victory.
-3. DM1.10 can reuse `tests/recordings.py` and the `bundle-*.json` envelope
-   for its own recorded-evidence cases; the disk-cascade bundle it needs
-   ("disk fills, then everything dies") is already there and already carries a
-   blind surface alongside the two faults.
+3. DM1.10 is done. For DM1.12, `deadman.correlate` is the piece the demo wants
+   on screen: `Correlator(diagnosis=DiagnosisEngine(client=...)).correlate(
+   sweep(probes))` returns incidents, `correlate.report.render` prints the
+   operator-facing text and `as_dict` the board row. It is the only layer that
+   visibly does something a graph-based monitor cannot, so it belongs in the
+   unedited take.
 4. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
    deploy lands.
 
