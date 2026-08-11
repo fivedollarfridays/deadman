@@ -2,7 +2,7 @@
 id: DM1.4
 title: Metricool probe and destination-verification spike
 plan: plan-sprint-1-engage
-status: in_progress
+status: done
 sprint: '1'
 depends_on:
 - DM1.1
@@ -17,6 +17,7 @@ runtime:
   pre_task_sha:
     worktree: e9071d2c59646b3ebaa38159ee6790a5d1abc3be
   started_at: '2026-08-11T01:17:36.155543+00:00'
+completed_at: '2026-08-11T01:33:20.425581+00:00'
 ---
 
 # Metricool probe and destination-verification spike
