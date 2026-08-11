@@ -1,7 +1,7 @@
 """The Cloud Run service: publishes the current board, and takes evidence in.
 
 A plain WSGI callable, no framework. The package declares zero runtime
-dependencies (see ``pyproject.toml``); pulling in a web framework for two
+dependencies (see ``pyproject.toml``); pulling in a web framework for three
 JSON endpoints would trade that for nothing. ``wsgiref`` (stdlib) serves it.
 
 ``GET /`` is the board: exactly ``sweep()`` plus ``blind_spots()`` over
@@ -15,10 +15,16 @@ live on a machine Cloud Run cannot reach at all — get onto that board. See
 :mod:`deadman.ingest` for what changes about a claim when it crosses that
 wire.
 
-**This module refuses to import without an ingest secret.** ``app`` is built
-at module scope and building it reads the environment, so an unconfigured
-deploy dies at startup rather than serving an endpoint that would accept
-evidence from anyone who can reach the URL.
+``POST /self-check`` is Cloud Scheduler's endpoint, not a human's: it runs the
+same local sweep on a cadence the deployment controls, and writes its own
+liveness through the DM2.1 store rather than this instance's filesystem, so
+the claim survives a cold start. See :mod:`deadman.scheduled`.
+
+**This module refuses to import without an ingest secret and a scheduler
+secret.** ``app`` is built at module scope and building it reads the
+environment, so an unconfigured deploy dies at startup rather than serving an
+endpoint that would accept evidence, or a trigger, from anyone who can reach
+the URL.
 """
 
 from __future__ import annotations
@@ -30,13 +36,14 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from wsgiref.simple_server import make_server
 
+from deadman import scheduled as scheduled_pkg
 from deadman.evidence.model import Evidence, Observation
 from deadman.ingest.auth import secret_from_env
 from deadman.ingest.endpoint import EVIDENCE_PATH, IngestEndpoint
 from deadman.probes.base import Probe, blind_spots, sweep
 from deadman.probes.disk import DiskProbe
 from deadman.probes.morning_brief import MorningBriefProbe
-from deadman.self_check import SelfEvidenceLog
+from deadman.self_check import SelfEvidenceLog, StoreSelfEvidenceLog
 from deadman.store.base import EvidenceStore
 from deadman.store.firestore import FirestoreEvidenceStore
 from deadman.store.memory import InMemoryEvidenceStore
@@ -171,6 +178,7 @@ def make_app(
     self_log: SelfEvidenceLog | None = None,
     ingest: IngestEndpoint | None = None,
     liveness_fn: LivenessFn | None = None,
+    scheduled: scheduled_pkg.ScheduledSelfCheckEndpoint | None = None,
 ) -> Callable[[dict, Callable], Iterable[bytes]]:
     """Build a WSGI app reading probes from ``probes_fn`` on every request,
     so the board reflects the current state rather than one taken at
@@ -189,6 +197,12 @@ def make_app(
     ``liveness_fn`` is read per request for the same reason as ``probes_fn``:
     silence accumulates between requests, so a report computed once at startup
     would answer with how things were when the instance booted.
+
+    ``scheduled`` is the endpoint Cloud Scheduler triggers (see
+    :mod:`deadman.scheduled`) — its own path, its own auth, and its own
+    self-evidence writer, deliberately separate from ``self_log`` above: that
+    one is written on a served board, this one on a cadence, and each must
+    keep proving liveness if the other stops.
     """
 
     def app(environ: dict, start_response: Callable) -> Iterable[bytes]:
@@ -201,6 +215,14 @@ def make_app(
                     start_response, _METHOD_NOT_ALLOWED, {"error": "method not allowed"}
                 )
             status, payload = ingest.handle(environ)
+            return _respond(start_response, status, payload)
+
+        if path == scheduled_pkg.SCHEDULED_PATH:
+            if method != "POST" or scheduled is None:
+                return _respond(
+                    start_response, _METHOD_NOT_ALLOWED, {"error": "method not allowed"}
+                )
+            status, payload = scheduled.handle(environ)
             return _respond(start_response, status, payload)
 
         if method != "GET":
@@ -272,6 +294,29 @@ def default_ingest(store: EvidenceStore | None = None) -> IngestEndpoint:
     return IngestEndpoint(store=store or default_store(), secret=secret_from_env())
 
 
+def default_scheduled(
+    store: EvidenceStore | None = None,
+) -> scheduled_pkg.ScheduledSelfCheckEndpoint:
+    """The scheduled self-check endpoint the deployed service serves.
+
+    Reads the shared secret from the environment and raises
+    :class:`~deadman.scheduled.auth.SchedulerNotConfigured` when there is
+    none — the same startup refusal :func:`default_ingest` makes, for the
+    same reason: a public endpoint that triggers work is a free
+    denial-of-service, so an unconfigured deploy must not boot with one.
+
+    Writes through the same store ``default_ingest`` and the liveness reader
+    share, via :class:`~deadman.self_check.StoreSelfEvidenceLog`, so the
+    self-check's own evidence survives a cold start the way DM1.11's
+    filesystem-backed log could not.
+    """
+    return scheduled_pkg.ScheduledSelfCheckEndpoint(
+        probes_fn=default_probes,
+        self_log=StoreSelfEvidenceLog(store=store or default_store()),
+        secret=scheduled_pkg.secret_from_env(),
+    )
+
+
 def default_expectations() -> tuple[CollectorExpectation, ...]:
     """Which collectors this deployment expects to hear from, and how often.
 
@@ -315,6 +360,7 @@ def build_app() -> Callable[[dict, Callable], Iterable[bytes]]:
         self_log=default_self_log(),
         ingest=default_ingest(store),
         liveness_fn=(lambda: assess(store, expectations)) if expectations else None,
+        scheduled=default_scheduled(store),
     )
 
 
