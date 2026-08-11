@@ -2,7 +2,7 @@
 id: DM1.12
 title: 'Integration gate: demo, README, architecture diagram'
 plan: plan-sprint-1-engage
-status: in_progress
+status: done
 sprint: '1'
 depends_on:
 - DM1.1
@@ -24,6 +24,7 @@ type: feature
 model: claude-opus-5
 base_branch: main
 ac_verified: null
+completed_at: '2026-08-11T05:25:00.344369+00:00'
 ---
 
 # Integration gate: demo, README, architecture diagram
