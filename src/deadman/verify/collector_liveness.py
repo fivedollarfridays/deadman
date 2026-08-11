@@ -53,15 +53,21 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from deadman.evidence.model import Evidence, Method, Observation, unobservable
+from deadman.evidence.model import Evidence, Method, Observation
 from deadman.ingest.arrival import COLLECTOR_ID, RECEIVED_AT
 from deadman.self_check import Liveness
 from deadman.store.base import DEFAULT_HISTORY_LIMIT, EvidenceStore, instant
 from deadman.verify.expectations import CollectorExpectation
-
-#: Named in the ``source`` of every row this module derives, so a board reader
-#: can tell a verdict deadman computed from a reading somebody delivered.
-SOURCE = "verify:collector_liveness"
+from deadman.verify.surface_verdict import (
+    CADENCE_SECONDS,
+    FRESH,
+    LIVENESS,
+    SILENT_AFTER_SECONDS,
+    SOURCE,
+    STALE,
+    UNREPORTED,
+    judge_surface,
+)
 
 #: Surface ids for collectors themselves: ``collector:kevin-mac``. The same
 #: ``rail:identifier`` shape every other surface uses, which is what lets an
@@ -72,19 +78,12 @@ COLLECTOR_RAIL = "collector"
 #: docstring for what a spool older than this does, and does not, do.
 ARRIVAL_LOOKBACK = DEFAULT_HISTORY_LIMIT
 
-LIVENESS = "liveness"
-CADENCE_SECONDS = "cadence_seconds"
-SILENT_AFTER_SECONDS = "silent_after_seconds"
 LAST_REPORT_AT = "last_report_at"
 SILENT_FOR_SECONDS = "silent_for_seconds"
 LAST_OBSERVATION = "last_observation"
 LAST_READ_AT = "last_read_at"
 AGE_SECONDS = "age_seconds"
 DECLARED_SURFACES = "declared_surfaces"
-
-_FRESH = "fresh"
-_STALE = "stale"
-_UNREPORTED = "unreported"
 
 
 def collector_surface(collector_id: str) -> str:
@@ -145,7 +144,7 @@ def assess(
 
     latest = store.latest_per_surface()
     judged = [
-        _judge_surface(surface, latest.get(surface), expectation, moment)
+        judge_surface(surface, latest.get(surface), expectation, moment)
         for expectation in declared_by
         for surface in expectation.surfaces
     ]
@@ -155,9 +154,9 @@ def assess(
     return LivenessReport(
         collectors=collectors,
         surfaces=tuple(row for _, row in judged),
-        fresh=kinds.count(_FRESH),
-        stale=kinds.count(_STALE),
-        unreported=kinds.count(_UNREPORTED),
+        fresh=kinds.count(FRESH),
+        stale=kinds.count(STALE),
+        unreported=kinds.count(UNREPORTED),
         undeclared=tuple(sorted(set(latest) - declared)),
     )
 
@@ -227,88 +226,6 @@ def _collector_summary(report: CollectorReport) -> str:
         f"collector {expectation.collector_id} last reported {silent:.0f}s ago, inside "
         f"its declared {deadline:g}s deadline"
     )
-
-
-def _judge_surface(
-    surface: str,
-    stored: Evidence | None,
-    expectation: CollectorExpectation,
-    moment: datetime,
-) -> tuple[str, Evidence]:
-    """One declared surface: never reported, stale, or the stored row as-is."""
-    if stored is None:
-        return _UNREPORTED, _never_reported(surface, expectation)
-
-    age = (moment - instant(stored.read_at)).total_seconds()
-    if age < 0:
-        return _STALE, _from_the_future(stored, -age)
-    if age > expectation.silence_after_seconds:
-        return _STALE, _too_old(stored, expectation, age)
-    return _FRESH, stored
-
-
-def _from_the_future(stored: Evidence, ahead: float) -> Evidence:
-    """A row whose ``read_at`` is ahead of our clock says nothing about now.
-
-    ``deadman.ingest.wire`` refuses these at the door, so reaching this branch
-    means the row predates that guard or arrived by another path. It is judged
-    here too because the failure is silent and permanent: a negative age never
-    exceeds the silence window, so the row would read fresh forever, and the
-    store orders by ``read_at``, so it would also stay newest forever. Treating
-    it as blindness rather than health is the whole argument of this project
-    applied to our own data.
-    """
-    return unobservable(
-        surface=stored.surface,
-        source=SOURCE,
-        why=(
-            f"{stored.surface} has a reading {int(ahead)}s in the future, so its "
-            "freshness cannot be judged; suspect a skewed clock on the reporting collector"
-        ),
-        read_at_ahead_seconds=ahead,
-        reported_read_at=instant(stored.read_at).isoformat(),
-    )
-
-
-def _never_reported(surface: str, expectation: CollectorExpectation) -> Evidence:
-    return unobservable(
-        surface=surface,
-        source=SOURCE,
-        why=(
-            f"no evidence has ever arrived for {surface}; collector "
-            f"{expectation.collector_id} is expected to report it every "
-            f"{expectation.interval_seconds:g}s"
-        ),
-        **_cadence_detail(expectation, Liveness.NO_EVIDENCE),
-    )
-
-
-def _too_old(stored: Evidence, expectation: CollectorExpectation, age: float) -> Evidence:
-    return unobservable(
-        surface=stored.surface,
-        source=SOURCE,
-        why=(
-            f"the newest evidence for {stored.surface} was read {age:.0f}s ago, past the "
-            f"{expectation.silence_after_seconds:g}s allowed by its declared "
-            f"{expectation.interval_seconds:g}s cadence"
-        ),
-        **_cadence_detail(expectation, Liveness.STALE),
-        **{
-            LAST_OBSERVATION: stored.observation.value,
-            LAST_READ_AT: instant(stored.read_at).isoformat(),
-            AGE_SECONDS: round(age, 1),
-        },
-    )
-
-
-def _cadence_detail(expectation: CollectorExpectation, liveness: Liveness) -> dict[str, object]:
-    """What every derived row carries, so a reader can check the arithmetic."""
-    return {
-        LIVENESS: liveness.value,
-        COLLECTOR_ID: expectation.collector_id,
-        CADENCE_SECONDS: expectation.interval_seconds,
-        SILENT_AFTER_SECONDS: expectation.silence_after_seconds,
-    }
 
 
 def _last_arrival(store: EvidenceStore, expectation: CollectorExpectation) -> datetime | None:

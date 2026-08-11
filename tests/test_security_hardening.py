@@ -72,8 +72,8 @@ class TestFutureReadAtCannotPinASurfaceFresh:
 
     def test_a_stored_future_row_reads_unobservable_not_fresh(self):
         """Defence in depth: rows predating this guard are already stored."""
-        from deadman.verify.collector_liveness import _judge_surface
         from deadman.verify.expectations import CollectorExpectation
+        from deadman.verify.surface_verdict import judge_surface
 
         future = Evidence(
             surface="host:mac/disk",
@@ -88,7 +88,7 @@ class TestFutureReadAtCannotPinASurfaceFresh:
             collector_id="mac-mini", interval_seconds=300.0, surfaces=("host:mac/disk",)
         )
 
-        kind, row = _judge_surface("host:mac/disk", future, expectation, NOW)
+        kind, row = judge_surface("host:mac/disk", future, expectation, NOW)
 
         assert kind != "fresh"
         assert row.observation is Observation.UNOBSERVABLE
