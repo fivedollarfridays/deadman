@@ -18,8 +18,9 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, and DM1.4 are `done`. Remaining wave-2 tasks (DM1.8,
-DM1.9) are unblocked and ready to start next.
+DM1.1, DM1.2, DM1.3, and DM1.4 are `done`. DM1.8 is `blocked` on a live GCP
+deploy step this session cannot perform (see Blockers). DM1.9 is unblocked
+and ready to start next.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -38,7 +39,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.5 | Diagnosis layer on Gemini via ADK | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
-| DM1.8 | Cloud Run via Cloud Build | P0 | 30 | claude-sonnet-5 | DM1.1 |
+| DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary | P1 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.10 | Cross-surface correlation | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
 | DM1.11 | Self-liveness + out-of-band alerting | P1 | 25 | claude-sonnet-5 | DM1.8 |
@@ -55,6 +56,50 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.8 Cloud Run service, blocked on live deploy (`/start-task DM1.8`)
+
+- Built everything locally verifiable, TDD throughout, and stopped short of
+  the one step this sandboxed environment structurally cannot do: an actual
+  `gcloud` deploy. That is a real, billable, hard-to-reverse action against
+  live external infrastructure requiring credentials this session does not
+  have — the honest outcome is `blocked`, not a fabricated URL.
+- `src/deadman/service.py`: a dependency-free WSGI app (`make_app`/`app`)
+  publishing the current board — `sweep()` + `blind_spots()` over probes
+  that need no secrets (`DiskProbe`, `MorningBriefProbe`, paths from
+  `DEADMAN_DISK_HISTORY`/`DEADMAN_BRIEF_LOG` env vars). A raising or
+  malformed probe becomes a blind-spot row, never a 500, per the base
+  contract. `tests/test_service.py`: 8 tests, board assembly and the WSGI
+  app exercised in-process (fake `environ`/`start_response`, no sockets) —
+  suite now 47/47 (up from 39).
+- `Dockerfile` + `.dockerignore`: installs the zero-dependency package and
+  runs `python -m deadman.service`. **Actually built and run locally** —
+  `docker build` succeeded, `docker run` + `curl` returned the board as
+  JSON (200), disk probe `healthy`, morning-brief probe correctly
+  `unobservable` (no log mounted in the container) — proving the board's
+  honest-blind-spot behavior survives containerization. Image removed after
+  verification; this was possible only because this Mac's Docker daemon
+  turned out to be working again (the sprint brief's "corrupted" note is
+  stale) — the deploy path itself still goes through Cloud Build regardless,
+  per the AC.
+  `cloudbuild.yaml`: build/push on `gcr.io/cloud-builders/docker` (Cloud
+  Build's own worker, never local), deploy via
+  `gcr.io/google.com/cloudsdktool/cloud-sdk`. Structure validated with
+  `yaml.safe_load`.
+- `infra/README.md`: project setup, API enablement (`cloudbuild`, `run`,
+  `artifactregistry`), the `gcloud builds submit` deploy command, URL
+  lookup, curl verification, the env var table, and an optional
+  local-Docker sanity-check path.
+- **Blocked, not done — see Blockers.** Checked this environment for any
+  path to a live deploy before declaring the blocker: no `gcloud` binary on
+  `PATH`, no `~/.config/gcloud`, no SDK under `~/google-cloud-sdk` or
+  Homebrew casks. Outbound network from this sandbox is actually live
+  (confirmed via a raw socket connect), so the gap is tooling/credentials,
+  not network egress. `bpsai-pair task update DM1.8 --status done` correctly
+  refused on the two live-deploy AC items; task set to `blocked` rather than
+  forced through.
+- Gates run on everything that doesn't require GCP: `pytest tests/` 47/47;
+  `ruff check .` clean; `bpsai-pair arch check --strict` clean.
 
 ### Session: 2026-08-11 — DM1.4 Metricool probe + verification spike (`/start-task DM1.4`)
 
@@ -212,13 +257,20 @@ retiring the seven existing point-solution monitors.
 
 ## What's Next
 
-1. Wave 2 has DM1.8 (Cloud Run — contest eligibility, retire early) and DM1.9
-   (SMS canary) left; both unblocked. DM1.5 (Gemini diagnosis) is unblocked too
-   and is the P0 hub.
-2. DM1.5's diagnosis layer must handle `UNOBSERVABLE` as a first-class input,
+1. **DM1.8 needs a human with GCP credentials** to run
+   `gcloud builds submit --config cloudbuild.yaml .` (see `infra/README.md`)
+   from a machine/session that has `gcloud` authenticated against a real
+   project, then report the deployed URL back so the last two ACs can be
+   checked and the task closed. Everything short of that live step is done
+   and verified (see Blocker #1 and this session's entry above).
+2. DM1.9 (SMS canary) is unblocked and ready to start. DM1.5 (Gemini
+   diagnosis) is unblocked too and is the P0 hub.
+3. DM1.5's diagnosis layer must handle `UNOBSERVABLE` as a first-class input,
    not an error case — after DM1.4 the Metricool surface reports it by design.
-3. DM1.9 can reuse `deadman.probes.destinations` rather than re-deriving how to
+4. DM1.9 can reuse `deadman.probes.destinations` rather than re-deriving how to
    read a destination.
+5. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
+   deploy lands.
 
 ## Blockers
 
@@ -226,6 +278,21 @@ retiring the seven existing point-solution monitors.
 `https://github.com/fivedollarfridays/deadman.git` and `bpsai-pair task show
 DM1.1` reports `status: done`. The remote-creation decision this blocker was
 waiting on was made outside this session; no action needed here.
+
+**1. DM1.8 blocked on live GCP deploy — needs a human with `gcloud` access.**
+This worktree/session has no `gcloud` CLI and no GCP credentials anywhere on
+the machine (checked `PATH`, `~/.config/gcloud`, `~/google-cloud-sdk`,
+Homebrew casks). Deploying is a real, billable, hard-to-reverse action
+against live external infrastructure — not something to attempt without
+explicit credentials and authorization, and not something faking a URL for
+would satisfy honestly. All four other ACs are done and verified locally
+(`Dockerfile` built and run with `curl` proving the board endpoint works
+end to end in a real container; `cloudbuild.yaml` validated structurally;
+`infra/README.md` written; `ruff`/`pytest`/`arch check` all clean). Task
+status set to `blocked`. **Needs:** someone with GCP project access to run
+`gcloud builds submit --config cloudbuild.yaml .` per `infra/README.md` and
+report the resulting Cloud Run URL, after which the remaining two AC boxes
+can be checked and DM1.8 closed.
 
 **1. `plan feasibility` REFUSES DM1.1, DM1.2, DM1.5** (fail-closed gate).
 Reason: downstream token risk if a hub task fails — 422,500 tokens behind
