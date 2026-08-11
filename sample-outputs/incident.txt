@@ -1,0 +1,20 @@
+INCIDENT — correlated
+Surfaces: host:mac/disk, metricool:fwtx_dao
+Co-occurred in this window: host:mac/disk, metricool:fwtx_dao, sms:relay
+
+Hypothesised shared cause:
+  The infrastructure is experiencing failures due to disk space exhaustion on the host. This is demonstrated by the host disk encountering a 'build aborted: no space left on device' error, which has also caused the metricool:fwtx_dao upload worker to fail with 'upload worker: OSError [Errno 28] no space left on device'.
+
+Basis: inferred, not traversed. No lineage graph connects host:mac/disk and metricool:fwtx_dao, so nothing was walked: the relationship was reasoned from co-occurrence in time plus evidence quoted out of each surface. It can be wrong in ways a declared dependency edge cannot.
+
+Confidence: 0.40 (the model claimed 0.90; capped by the trust tier of the weakest evidence cited)
+Why: co-occurring faults on host:mac/disk, metricool:fwtx_dao are tied together by evidence cited from each; the relationship was inferred, not traversed
+
+Not accounted for by this incident:
+  - sms:relay
+
+Cited evidence:
+  host:mac/disk#7f8f3eb7  'build aborted: no space left on device'
+  metricool:fwtx_dao#ace64ba3  'upload worker: OSError [Errno 28] no space left on device'
+
+Diagnosis: gemini-3.5-flash at temperature 0.0, prompt diagnose/v1 (grounded)

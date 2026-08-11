@@ -11,15 +11,30 @@ carries it).
 - every other file — one model response, verbatim, plus the model name,
   temperature and prompt version it was produced under.
 
-**These responses are authored against the response contract in
-`deadman.diagnose.prompt`, not captured from a live Gemini call.** No
-credentials exist in this environment (see the DM1.8 blocker in
-`.paircoder/context/state.md` for the same constraint on GCP). They are
-deliberately realistic — one is wrapped in a markdown fence because models do
-that, and several are the specific ways a model goes wrong. Replace them with
-real captures once a live smoke test has run; the loader and the engine will
-not need to change, because the recording envelope is what a capture would
-write.
+**Every recording carries a `captured` flag, and most of these are `false`.**
+An authored recording is written against the response contract in
+`deadman.diagnose.prompt`. It proves the parser handles a shape we invented,
+which is worth something, but it is a weaker claim than it looks: we control
+both sides, so it can never surprise us. They are deliberately realistic —
+one is wrapped in a markdown fence because models do that, and several are
+the specific ways a model goes wrong, which is exactly the material a live
+capture is unlikely to hand you on demand.
+
+`captured-disk-cascade.json` is the exception and is `captured: true`: a
+verbatim response from live `gemini-3.5-flash`, produced by
+`scripts/capture_recording.py`. See `docs/gemini-verification.md` for the
+environment it needs. `tests/test_diagnose_captured.py` replays it, and when
+that file and an authored fixture disagree, **the authored one is wrong.**
+
+Refresh or add captures with:
+
+```bash
+python scripts/capture_recording.py bundle-disk-cascade captured-disk-cascade
+```
+
+Nothing downstream changes when a recording flips from authored to captured.
+The engine only ever sees a string, which is why the envelope was designed
+this way from the start.
 
 ## `bundle-metricool-publish-failure`
 

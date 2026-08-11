@@ -1,0 +1,11 @@
+$ deadman-self-check   # live
+live: last completed sweep was 1.0h ago
+exit=0
+
+$ deadman-self-check   # stale
+stale: last completed sweep was 100.0h ago, outside the 30h window
+exit=1
+
+$ deadman-self-check   # no_evidence
+no_evidence: no completed sweep has ever been recorded at <tmp>/self-no_evidence.jsonl
+exit=1

@@ -1,0 +1,13 @@
+{
+  "decision": "escalate",
+  "cause": "resource_exhaustion",
+  "reason": "confidence 0.4 is under 'reclaim-space''s floor of 0.6; the cited evidence cannot carry this action",
+  "action": null,
+  "intent": null,
+  "confidence": 0.4,
+  "diagnosis_status": "grounded",
+  "evidence_ids": [
+    "host:mac/disk#7f8f3eb7",
+    "metricool:fwtx_dao#ace64ba3"
+  ]
+}

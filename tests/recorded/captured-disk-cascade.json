@@ -1,0 +1,10 @@
+{
+  "bundle": "bundle-disk-cascade",
+  "captured": true,
+  "captured_at": "2026-08-11T05:11:31.705664+00:00",
+  "model": "gemini-3.5-flash",
+  "note": "Real Gemini capture. The disk-fills-then-everything-dies cascade, which is the case the correlation layer exists for.",
+  "prompt_version": "diagnose/v1",
+  "response": "{\n  \"hypothesis\": \"The infrastructure is experiencing failures due to disk space exhaustion on the host. This is demonstrated by the host disk encountering a 'build aborted: no space left on device' error, which has also caused the metricool:fwtx_dao upload worker to fail with 'upload worker: OSError [Errno 28] no space left on device'.\",\n  \"confidence\": 0.9,\n  \"citations\": [\n    {\n      \"evidence_id\": \"host:mac/disk#7f8f3eb7\",\n      \"quote\": \"build aborted: no space left on device\"\n    },\n    {\n      \"evidence_id\": \"metricool:fwtx_dao#ace64ba3\",\n      \"quote\": \"upload worker: OSError [Errno 28] no space left on device\"\n    }\n  ]\n}",
+  "temperature": 0.0
+}
