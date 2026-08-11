@@ -19,23 +19,28 @@ the outage. Once running, a failed call is left to raise and is caught by
 :class:`deadman.diagnose.engine.DiagnosisEngine`, which turns it into an
 ``UNAVAILABLE`` diagnosis rather than a crash or, worse, a verdict.
 
+.. note::
+
+   The ADK call shape below is still **not exercised by the test suite**, and
+   deliberately so: the suite is hermetic and must never reach Vertex. It has
+   now been exercised once by hand, against live Gemini, and it works. See
+   ``docs/gemini-verification.md`` for the run and how to repeat it.
+
+   That smoke test mattered for a reason worth recording. It returned a
+   diagnosis that declined to name a cause: *"the available evidence is
+   insufficient to determine the underlying cause of the cron job's silent
+   failure."* The grounding rules in :mod:`deadman.diagnose.engine` are
+   enforced offline against authored fixtures, which only ever proves the
+   fixtures obey them. This is the first evidence that a real model, handed a
+   real fault with no cause in the evidence, declines to invent one.
+
 .. warning::
 
-   The ADK call shape below is **not exercised by the test suite**. This
-   environment has no GCP credentials and no ``google-adk`` install (the same
-   constraint that blocked DM1.8's live deploy), so it is written to the
-   documented ADK interface and needs one live smoke test before the demo:
-
-   .. code-block:: python
-
-      from deadman.diagnose.engine import DiagnosisEngine
-      from deadman.diagnose.gemini import GeminiClient
-
-      print(DiagnosisEngine(client=GeminiClient()).diagnose(evidence))
-
-   When that runs, save the raw response into ``tests/recorded/`` as a real
-   capture and retire the authored ones. Nothing else needs to change: the
-   engine only ever sees a string.
+   ``gemini-3.5-flash`` is served **only from the ``global`` Vertex
+   endpoint.** In ``us-central1``, the region the rest of this project
+   deploys to, it returns 404 NOT_FOUND, and so does every other 3.x id.
+   Set ``GOOGLE_CLOUD_LOCATION=global`` for the diagnosis path specifically;
+   matching it to the Cloud Run region is exactly the wrong instinct here.
 """
 
 from __future__ import annotations
@@ -45,6 +50,8 @@ from typing import Any
 
 #: The contest requires Gemini; this is the model the sprint brief names.
 #: Overridable per instance, and recorded on every diagnosis either way.
+#: Verified live on 2026-08-10 — but only via the ``global`` endpoint. See the
+#: warning in this module's docstring before changing ``GOOGLE_CLOUD_LOCATION``.
 DEFAULT_MODEL = "gemini-3.5-flash"
 
 #: Diagnosis is not a creative task, and a hypothesis that cannot be

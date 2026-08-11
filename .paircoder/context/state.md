@@ -18,11 +18,18 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, DM1.7, DM1.9 and DM1.10 are `done`.
-DM1.8 is `blocked` on a live GCP deploy step this session cannot perform (see
-Blockers). DM1.11 still waits on DM1.8; **DM1.12 (integration gate) is the
-only task left that isn't blocked on the GCP deploy**, though it depends on
-all tasks including the blocked DM1.8/DM1.11.
+Ten of twelve tasks are `done`, DM1.8 included. **The GCP blocker is gone and
+nothing is blocked on credentials any more.** Only DM1.11 (self-liveness) and
+DM1.12 (integration gate) remain, and both are ready to start.
+
+**The service is live and public** at https://deadman-mrapac5nda-uc.a.run.app
+(project `deadman-20260810`). `GET /` returns the board.
+
+**Contest eligibility is no longer at risk.** The live Gemini call has now
+happened: `gemini-3.5-flash` through the ADK, returning a structured
+`Diagnosis` with citations. That was the single largest open risk, since an
+untested call shape is not a quality problem but a disqualification. See
+`docs/gemini-verification.md`.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -30,7 +37,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.7, DM1.9 and DM1.10 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, 10 `done`, DM1.11 and DM1.12 open
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -41,7 +48,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.5 | Diagnosis layer on Gemini via ADK ✓ | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor ✓ | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop ✓ | P0 | 25 | claude-sonnet-5 | DM1.6 |
-| DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
+| DM1.8 | Cloud Run via Cloud Build ✓ | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.10 | Cross-surface correlation ✓ | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
 | DM1.11 | Self-liveness + out-of-band alerting | P1 | 25 | claude-sonnet-5 | DM1.8 |
@@ -58,6 +65,55 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-10 — DM1.8 deployed live, and the Gemini path proven
+
+Two blockers that had stood since the sprint began are both gone. GCP access
+now exists on the rig, which is what unlocked them.
+
+**DM1.8 is done, and deploying it broke twice first.** Live at
+https://deadman-mrapac5nda-uc.a.run.app, public, returning the board. Three
+defects stood between the committed config and a reachable service:
+
+- `cloudbuild.yaml` assembled its image reference through nested
+  substitutions. Cloud Build does not expand a substitution inside another
+  substitution's default value, so `gcr.io/${PROJECT_ID}/deadman:latest`
+  reached the builder as that literal string. `SHORT_SHA` could not stand in
+  either: it is a built-in that populates only for trigger-based builds.
+- `--allow-unauthenticated` was not sufficient by itself. Cloud Build's
+  service account deployed the revision without permission to set the IAM
+  policy, so the build reported SUCCESS while every request got 403 from the
+  Google frontend, before reaching the container. Nothing in the output
+  connects those two facts. A one-time `run.invoker` binding fixes it.
+- The README documented a deploy command nobody had ever run, and the command
+  was wrong. Testing the fresh-clone AC by executing the README verbatim is
+  what caught it.
+
+**The live Gemini call happened, which retires the eligibility risk.**
+`gemini-3.5-flash` through the ADK returned a structured `Diagnosis` with
+citations. Two findings, both in `docs/gemini-verification.md`:
+
+- `gemini-3.5-flash` is served **only from the `global` Vertex endpoint** and
+  404s in `us-central1`. Matching the location to the Cloud Run region is the
+  natural instinct and it silently costs you the required model.
+- A freshly created service account returns 403 on predict for roughly a
+  minute while the IAM binding propagates, which looks exactly like a missing
+  role. Verify the binding before changing anything.
+
+The most useful result was the content of the diagnosis, not the fact of it.
+Handed a real fault with no cause anywhere in the evidence, the model declined
+to name one: *"the available evidence is insufficient to determine the
+underlying cause."* The grounding rules are enforced offline against fixtures
+we wrote, which only proves our fixtures obey our rules. This is the first
+evidence that a real model behaves the same way.
+
+**Also closed a gate gap.** CI ran `ruff check`, which does not police
+formatting, so 16 source and test files had drifted while every build stayed
+green. Added `ruff format --check` and `pytest -n auto`. Worth recording that
+adding the gate immediately broke CI: reformatting the bpsai-pair scaffolding
+in `scripts/cc_hook.py` pushed a function from under the 50-line cap to 80 and
+failed `arch check --strict`. **Arch check has to run after the formatter.**
+That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ### Session: 2026-08-11 — DM1.7 verification loop (`/start-task DM1.7`)
 
@@ -561,14 +617,19 @@ retiring the seven existing point-solution monitors.
 
 ## What's Next
 
-1. **Two things now need the same human with GCP access**, and they are worth
-   doing in one sitting: (a) DM1.8's `gcloud builds submit --config
-   cloudbuild.yaml .` per `infra/README.md`, reporting the deployed URL back;
-   (b) one live Gemini smoke test through `GeminiClient` per the `.. warning::`
-   in `src/deadman/diagnose/gemini.py`, to confirm the ADK call shape and to
-   satisfy contest eligibility, which requires a real Gemini call. Save the raw
-   response into `tests/recorded/` as a genuine capture and retire the authored
-   one; nothing in the engine changes, it only ever sees a string.
+1. **DONE — both GCP items landed.** The deploy is live at
+   https://deadman-mrapac5nda-uc.a.run.app and the live Gemini call has run
+   (`gemini-3.5-flash` via ADK, structured `Diagnosis` with citations). Two
+   findings from doing it, both recorded in `docs/gemini-verification.md`:
+   `gemini-3.5-flash` is served **only from the `global` Vertex endpoint** and
+   404s in `us-central1`, and a fresh service account returns 403 for about a
+   minute before the IAM binding takes effect, which is indistinguishable from
+   a missing role.
+
+   Still open from that item: the recorded fixtures in `tests/recorded/` are
+   still authored, not real captures. The smoke test proved the call shape but
+   its raw response was not saved. Worth doing in DM1.12 so the offline tests
+   replay something a real model actually said.
 2. DM1.7 is done. `deadman.remediate.verify.verify_remediation(executor,
    probe, diagnosis, evidence, max_attempts=3)` is ready to be the loop
    DM1.12 wires in: it takes the same `Executor` and `Diagnosis`/`Evidence`
@@ -580,12 +641,12 @@ retiring the seven existing point-solution monitors.
    operator-facing text and `as_dict` the board row. It is the only layer that
    visibly does something a graph-based monitor cannot, so it belongs in the
    unedited take.
-4. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
-   deploy lands.
-5. DM1.12 (integration gate) is now the only task not blocked by the GCP
-   deploy that hasn't started — though its own AC depends on every task
-   including the blocked DM1.8/DM1.11, so it cannot fully close either until
-   that human-with-GCP-access session happens (see What's Next #1).
+4. **DM1.11 (self-liveness) is unblocked and is the next task to run.** DM1.8
+   is done, so its dependency is satisfied. Note for whoever takes it: the
+   deployed service is the thing whose liveness must be proven from capture
+   evidence, and its alert path must not route through any monitored surface.
+5. DM1.12 (integration gate) is the last task. Every dependency is now `done`,
+   so it can close for real rather than partially.
 
 ## Blockers
 
@@ -594,22 +655,24 @@ retiring the seven existing point-solution monitors.
 DM1.1` reports `status: done`. The remote-creation decision this blocker was
 waiting on was made outside this session; no action needed here.
 
-**1. DM1.8 blocked on live GCP deploy — needs a human with `gcloud` access.**
-This worktree/session has no `gcloud` CLI and no GCP credentials anywhere on
-the machine (checked `PATH`, `~/.config/gcloud`, `~/google-cloud-sdk`,
-Homebrew casks). Deploying is a real, billable, hard-to-reverse action
-against live external infrastructure — not something to attempt without
-explicit credentials and authorization, and not something faking a URL for
-would satisfy honestly. All four other ACs are done and verified locally
-(`Dockerfile` built and run with `curl` proving the board endpoint works
-end to end in a real container; `cloudbuild.yaml` validated structurally;
-`infra/README.md` written; `ruff`/`pytest`/`arch check` all clean). Task
-status set to `blocked`. **Needs:** someone with GCP project access to run
-`gcloud builds submit --config cloudbuild.yaml .` per `infra/README.md` and
-report the resulting Cloud Run URL, after which the remaining two AC boxes
-can be checked and DM1.8 closed.
+**1. RESOLVED — DM1.8's live GCP deploy.** Project `deadman-20260810` was
+created and gcloud installed on the rig, which is where the deploy ran from.
+The service is live and public at https://deadman-mrapac5nda-uc.a.run.app and
+DM1.8 is `done` with all six ACs verified.
 
-**1. `plan feasibility` REFUSES DM1.1, DM1.2, DM1.5** (fail-closed gate).
+Deploying it surfaced two defects in what the previous session had written,
+both of which produce results that look fine: `cloudbuild.yaml` used
+substitutions nested inside other substitutions, which Cloud Build does not
+expand, and `--allow-unauthenticated` alone left the service returning 403
+from the Google frontend while the build reported SUCCESS. Both are fixed and
+documented in `infra/README.md`.
+
+The lesson generalises past this task: `infra/README.md` documented a deploy
+command that had never been run. The command was wrong. A runbook nobody has
+executed is a hypothesis, and this project of all projects should not treat an
+unexercised claim as evidence.
+
+**2. `plan feasibility` REFUSES DM1.1, DM1.2, DM1.5** (fail-closed gate).
 Reason: downstream token risk if a hub task fails — 422,500 tokens behind
 DM1.1, 198,500 behind DM1.2, 151,500 behind DM1.5. The gate prescribes
 inserting intermediate checkpoint/commit tasks. All three already end in a
@@ -621,7 +684,7 @@ gate is asking for. **Not overridden — an override is audited to
 bpsai-pair plan feasibility plan-2026-08-dm1-deadman-v1 --override "<reason>"
 ```
 
-**2. Sprint is 345 Cx against a 300 Cx budget (~15% over).** Per the planning
+**3. Sprint is 345 Cx against a 300 Cx budget (~15% over).** Per the planning
 skill's scope rule this is Epic-shaped; the plan record is currently a Story.
 Either accept the overrun, cut from the list above, or re-scope to an Epic.
 <!-- paircoder:state:end -->
