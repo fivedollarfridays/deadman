@@ -24,29 +24,48 @@ gcloud services enable cloudbuild.googleapis.com run.googleapis.com \
 
 ## Deploy
 
-From the repository root:
+From a clean checkout of the commit you intend to ship:
 
 ```bash
-gcloud builds submit --config cloudbuild.yaml .
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_TAG=$(git rev-parse HEAD) .
 ```
 
 This uploads the source to Cloud Build, which builds the image
 (`Dockerfile`), pushes it to `gcr.io/$PROJECT_ID/deadman`, and deploys it to
 Cloud Run — all on Google's infrastructure, never touching a local Docker
-daemon. Default substitutions deploy a service named `deadman` to
-`us-central1`; override either with `--substitutions`:
+daemon.
+
+**Tag with the commit SHA, and check the tree is clean first.** The tag is the
+only link between a running revision and the source that produced it. Deploy
+from a dirty tree and the tag names a commit the image does not contain, which
+is worse than no tag at all: it is a provenance claim that is confidently
+wrong. `git status --porcelain` should be empty.
 
 ```bash
-gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_SERVICE=deadman,_REGION=us-central1 .
+gcloud run services describe deadman --region=us-central1 \
+  --format='value(spec.template.spec.containers[0].image)'
+# -> gcr.io/PROJECT/deadman:ba550b6b681037503418c0c0c54d6da54e9a0dc7
 ```
 
-The default tag is `latest`. To deploy an identifiable revision, override
-`_TAG`:
+That command is the whole point of tagging. Anyone can ask a running service
+which commit it is, and get an answer they can `git show`.
+
+The bare form works and is what the fresh-clone check runs, but it tags the
+image `latest`, which answers that question with nothing:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml .
+```
+
+A service whose provenance is unknowable is the failure mode this whole
+project is an argument against. Do not let this one be an example of it.
+
+Service name and region are overridable the same way:
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_TAG=$(date +%Y%m%d-%H%M%S) .
+  --substitutions=_SERVICE=deadman,_REGION=us-central1,_TAG=$(git rev-parse HEAD) .
 ```
 
 ### Why the image reference is spelled out in every step
