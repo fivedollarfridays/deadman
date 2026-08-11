@@ -1,0 +1,21 @@
+id: plan-2026-08-dm2-make-it-real
+title: Dm2 Make It Real
+type: feature
+status: in_progress
+created_at: '2026-08-11T18:34:13.278459+00:00'
+skills:
+- planning-with-pm
+phases:
+- id: 1
+  tasks:
+  - DM2.1
+  - DM2.2
+  - DM2.7
+  - DM2.3
+  - DM2.4
+  - DM2.5
+  - DM2.6
+  - DM2.8
+  - DM2.9
+metadata:
+  source_backlog: plans/backlogs/DM2-make-it-real.md
