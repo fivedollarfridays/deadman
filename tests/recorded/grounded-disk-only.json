@@ -1,0 +1,9 @@
+{
+  "note": "Grounded on a single local-artifact read, so the trust ceiling does not bind.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"Free space is falling at a steady rate and will cross the operational floor within days; the level is not yet alarming but the slope is.\", \"confidence\": 0.7, \"citations\": [{\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"runway_days=2.1\"}, {\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"slope_gb_per_day=-20.0\"}]}"
+}

@@ -1,0 +1,9 @@
+{
+  "note": "Every citation is legitimate; the invented fact rides in the prose instead, attributed to evidence that does not exist.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"Disk exhaustion took out the upload worker, corroborated by gmail:alerts#5c5c5c5c which shows the outage alert never left the host.\", \"confidence\": 0.75, \"citations\": [{\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"runway_days=2.1\"}]}"
+}

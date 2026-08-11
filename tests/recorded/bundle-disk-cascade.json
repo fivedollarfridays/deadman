@@ -1,0 +1,44 @@
+{
+  "note": "The disk-fills-then-everything-dies case. One host, three surfaces, no lineage graph between them.",
+  "evidence": [
+    {
+      "surface": "host:mac/disk",
+      "observation": "fault",
+      "method": "local_artifact",
+      "summary": "free space projected to hit the 10GB floor in 2.1 days",
+      "source": "shutil.disk_usage('/')",
+      "read_at": "2026-08-11T03:00:00+00:00",
+      "detail": {
+        "free_gb": 12.4,
+        "slope_gb_per_day": -20.0,
+        "runway_days": 2.1,
+        "docker_note": "build aborted: no space left on device"
+      }
+    },
+    {
+      "surface": "metricool:fwtx_dao",
+      "observation": "fault",
+      "method": "reported",
+      "summary": "post 8891 reported published but absent at the destination",
+      "source": "metricool api /v1/scheduled",
+      "read_at": "2026-08-11T03:00:00+00:00",
+      "detail": {
+        "post_id": "8891",
+        "status_code": 500,
+        "body": "upload worker: OSError [Errno 28] no space left on device"
+      }
+    },
+    {
+      "surface": "sms:relay",
+      "observation": "unobservable",
+      "method": "reported",
+      "summary": "cannot observe sms:relay: relay host unreachable",
+      "source": "sms:relay active canary",
+      "read_at": "2026-08-11T03:00:00+00:00",
+      "detail": {
+        "reason": "relay host unreachable",
+        "dispatch_outcome": "unreachable"
+      }
+    }
+  ]
+}

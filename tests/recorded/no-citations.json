@@ -1,0 +1,9 @@
+{
+  "note": "A confident hypothesis resting on nothing at all.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"This is almost certainly a transient platform-side incident that will clear on its own.\", \"confidence\": 0.9, \"citations\": []}"
+}

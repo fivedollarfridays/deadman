@@ -1,0 +1,9 @@
+{
+  "note": "Cites a surface that was never probed. The id is well-formed, which is what makes it dangerous.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"The outage began on Instagram and propagated back through the scheduler.\", \"confidence\": 0.6, \"citations\": [{\"evidence_id\": \"instagram:fwtx_dao#11aa22bb\", \"quote\": \"post not found at destination\"}]}"
+}

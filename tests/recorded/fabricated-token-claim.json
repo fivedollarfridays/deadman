@@ -1,0 +1,9 @@
+{
+  "note": "The planted fabrication. One real citation and one invented fact, which is how this actually goes wrong -- a wholly fabricated response is easy to spot, a mostly-true one is not.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"The Metricool publish failed because the OAuth token for the destination channel expired; the disk trend is coincidental.\", \"confidence\": 0.88, \"citations\": [{\"evidence_id\": \"metricool:fwtx_dao#ace64ba3\", \"quote\": \"status_code=500\"}, {\"evidence_id\": \"metricool:fwtx_dao#ace64ba3\", \"quote\": \"oauth token expired at 2026-08-01T00:00:00Z\"}]}"
+}

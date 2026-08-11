@@ -1,0 +1,9 @@
+{
+  "note": "Well-grounded citations, but the confidence field is outside the contract.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"Disk exhaustion starved the upload worker.\", \"confidence\": 1.4, \"citations\": [{\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"runway_days=2.1\"}]}"
+}

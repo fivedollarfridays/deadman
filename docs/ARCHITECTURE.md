@@ -25,6 +25,26 @@ is alive, when every thing is different?"**
 evidence and chooses an action. Code proves the outcome. Otherwise the
 remediation is just another heartbeat, which is the thing this argues against.
 
+## How "never asserts a fact" is actually enforced
+
+`deadman.diagnose` splits a model response into two kinds of content and
+treats them completely differently.
+
+| | Enforcement |
+|---|---|
+| **Facts** — the `citations` array | Each must be quoted **verbatim** out of the one piece of evidence it names. Checked per-evidence, so attributing the scheduler's 500 to the disk read fails. Unknown or hallucinated evidence ids fail. |
+| **Hypothesis** — free prose | Allowed to be new text; that is the point. Never rendered or consumed as fact, and confidence is capped by the trust tier of the cited evidence, so a claim leaning on `REPORTED` cannot be held strongly. |
+
+One failed citation discards the **entire** response — the hypothesis was
+reasoned from the invented fact along with the rest, so keeping the survivors
+would leave a conclusion on a premise that was thrown out. The result becomes
+`DiagnosisStatus.UNGROUNDED`: zero confidence, `is_actionable` false, the
+rejected text retained so a human can review what was refused.
+
+Three statuses, for the same reason `Observation` has three. `UNGROUNDED`
+("the model said something false") and `UNAVAILABLE` ("we could not read what
+it said") are different facts and are never collapsed.
+
 ## Surfaces (v1)
 
 | Surface | Capture evidence | Why it's interesting |

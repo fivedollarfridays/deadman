@@ -1,0 +1,9 @@
+{
+  "note": "The model ignored the response contract and answered conversationally.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "I think the disk is probably filling up and that is causing the other failures. Let me know if you would like me to look at anything else!"
+}

@@ -1,0 +1,9 @@
+{
+  "note": "The good case, wrapped in a markdown fence because that is what models actually emit.",
+  "captured": false,
+  "bundle": "bundle-disk-cascade",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "```json\n{\n  \"hypothesis\": \"The volume filling is upstream of the Metricool failure rather than beside it: the upload worker hit ENOSPC on the same host whose free space is trending to the floor, so the post was accepted for scheduling and then died on write, which is why the scheduler still reports it published.\",\n  \"confidence\": 0.7,\n  \"citations\": [\n    {\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"slope_gb_per_day=-20.0\"},\n    {\"evidence_id\": \"host:mac/disk#7f8f3eb7\", \"quote\": \"build aborted: no space left on device\"},\n    {\"evidence_id\": \"metricool:fwtx_dao#ace64ba3\", \"quote\": \"upload worker: OSError [Errno 28] no space left on device\"},\n    {\"evidence_id\": \"metricool:fwtx_dao#ace64ba3\", \"quote\": \"status_code=500\"}\n  ]\n}\n```"
+}
