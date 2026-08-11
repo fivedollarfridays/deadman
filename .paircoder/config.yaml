@@ -166,3 +166,21 @@ containment:
   - api.trello.com
   - github.com
   - pypi.org
+overrides:
+  pack.excludes:
+    value:
+    - .git
+    - .venv
+    - __pycache__
+    - node_modules
+    - dist
+    - build
+    - '*.log'
+    - '*.bak'
+    - '*.egg-info'
+    - .pytest_cache
+    - .mypy_cache
+    - .ruff_cache
+    - htmlcov
+    - .coverage
+    reason: promoted by upgrade 2.42.0; rationale not recorded in source
