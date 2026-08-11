@@ -80,6 +80,8 @@ def _fixed(board: dict, work: Path) -> dict:
         row["read_at"] = NOW.isoformat()
         # The generator runs from a temp directory whose path differs per run.
         row["source"] = row["source"].replace(str(work), "<work>")
+        if "path" in row.get("detail", {}):
+            row["detail"]["path"] = row["detail"]["path"].replace(str(work), "<work>")
         if row["surface"].startswith("host:disk"):
             row["summary"] = REDACTED
         for key in VOLATILE:

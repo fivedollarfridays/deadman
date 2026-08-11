@@ -262,6 +262,14 @@ all — not "calls it against a mock", calls it *zero times* — which is what
 lets a test assert the property under the suite's real hermetic socket
 block instead of only against a fake.
 
+**Two machines, same probe, distinct ids.** `host:mac/disk` and
+`host:rig/disk` are both `DiskProbe`, differing only in a `host` config
+argument, because a full volume on one machine says nothing about the
+other and a shared surface id would let one machine's healthy report paper
+over the other's fault. See `docs/surfaces.md` for the real path, cadence
+and blindness meaning of every surface actually deployed, as opposed to the
+abstract "Surfaces (v1)" table above.
+
 ## Deployment
 
 Brain in **Cloud Run**. Collectors on each host push evidence outward. Actions

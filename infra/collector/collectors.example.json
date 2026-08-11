@@ -5,8 +5,16 @@
       "interval_seconds": 900,
       "grace_intervals": 1.0,
       "surfaces": [
-        "host:disk/",
+        "host:mac/disk",
         "cron:morning-brief"
+      ]
+    },
+    {
+      "collector_id": "kevin-rig",
+      "interval_seconds": 900,
+      "grace_intervals": 1.0,
+      "surfaces": [
+        "host:rig/disk"
       ]
     }
   ]

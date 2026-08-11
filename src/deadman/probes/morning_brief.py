@@ -99,7 +99,12 @@ class MorningBriefProbe:
                 last_send_at=None,
                 age_hours=None,
             )
-        return unobservable(SURFACE, src, "log directory does not exist (path misconfigured?)")
+        return unobservable(
+            SURFACE,
+            src,
+            "log directory does not exist (path misconfigured?)",
+            path=src,
+        )
 
     def _age_result(self, last_send: datetime, row_count: int, src: str) -> Evidence:
         now = datetime.now(timezone.utc)

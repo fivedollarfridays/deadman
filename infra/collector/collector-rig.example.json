@@ -1,5 +1,5 @@
 {
-  "collector_id": "kevin-mac",
+  "collector_id": "kevin-rig",
   "ingest_url": "https://deadman-mrapac5nda-uc.a.run.app",
   "spool_dir": "/tmp/deadman/collector-spool",
   "probes": [
@@ -7,14 +7,8 @@
       "type": "disk",
       "args": {
         "volume": "/",
-        "host": "mac",
+        "host": "rig",
         "history_path": "/tmp/deadman/disk-history.jsonl"
-      }
-    },
-    {
-      "type": "morning_brief",
-      "args": {
-        "log_path": "/Users/kevin/ops/data/brief-send-log.jsonl"
       }
     }
   ]

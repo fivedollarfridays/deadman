@@ -178,3 +178,38 @@ class TestBuildProbes:
         (probe,) = build_probes(specs)
 
         assert probe.runway_days == 7.0
+
+    def test_a_probes_real_path_comes_from_config_never_a_hardcoded_literal(self):
+        """The whole point of this module: two configs naming two arbitrary,
+        never-before-seen paths must produce probes pointed at exactly those
+        paths, not at anything the collector or a probe class shipped with."""
+        one = {
+            "type": "morning_brief",
+            "args": {"log_path": "/first/never-seen/brief-a.jsonl"},
+        }
+        other = {
+            "type": "morning_brief",
+            "args": {"log_path": "/second/also-never-seen/brief-b.jsonl"},
+        }
+        payload = {**VALID_PAYLOAD, "probes": [one, other]}
+
+        (probe_a, probe_b) = build_probes(parse_config(payload).probes)
+
+        assert probe_a.log_path == Path("/first/never-seen/brief-a.jsonl")
+        assert probe_b.log_path == Path("/second/also-never-seen/brief-b.jsonl")
+        assert probe_a.log_path != probe_b.log_path
+
+    def test_the_disk_probes_host_argument_is_config_driven(self):
+        """See ``DiskProbe.host``: two machines named in two configs must get
+        two distinct, stable surface ids — nothing about which machine this
+        is may be compiled into the probe."""
+        specs = (
+            ProbeSpec(type="disk", args={"volume": "/", "host": "mac"}),
+            ProbeSpec(type="disk", args={"volume": "/", "host": "rig"}),
+        )
+
+        mac_probe, rig_probe = build_probes(specs)
+
+        assert mac_probe.surface == "host:mac/disk"
+        assert rig_probe.surface == "host:rig/disk"
+        assert mac_probe.surface != rig_probe.surface

@@ -192,17 +192,26 @@ class TestTheShippedExampleIsRunnable:
 
         expectations = load_expectations(example)
 
-        assert [e.collector_id for e in expectations] == ["kevin-mac"]
+        assert {e.collector_id for e in expectations} == {"kevin-mac", "kevin-rig"}
 
-    def test_the_example_declares_the_surfaces_the_example_collector_sweeps(self) -> None:
-        """The two example files are one deployment described twice, and a
+    def test_the_example_declares_the_surfaces_each_example_collector_sweeps(self) -> None:
+        """The collector-side example files and the service-side liveness
+        declaration are one deployment described twice per machine, and a
         surface declared on one side but not swept on the other is a silence
         nobody would notice — precisely this module's failure mode."""
         infra = Path(__file__).resolve().parents[1] / "infra" / "collector"
-        collector = json.loads((infra / "collector.example.json").read_text())
-        (expectation,) = load_expectations(infra / "collectors.example.json")
+        expectations = {
+            e.collector_id: e for e in load_expectations(infra / "collectors.example.json")
+        }
+        collector_configs = {
+            "kevin-mac": infra / "collector.example.json",
+            "kevin-rig": infra / "collector-rig.example.json",
+        }
 
-        swept = {probe.surface for probe in build_probes(parse_config(collector).probes)}
+        assert set(expectations) == set(collector_configs)
+        for collector_id, config_path in collector_configs.items():
+            collector = json.loads(config_path.read_text())
+            swept = {probe.surface for probe in build_probes(parse_config(collector).probes)}
 
-        assert set(expectation.surfaces) == swept
-        assert expectation.collector_id == collector["collector_id"]
+            assert set(expectations[collector_id].surfaces) == swept
+            assert expectations[collector_id].collector_id == collector["collector_id"]

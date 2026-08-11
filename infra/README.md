@@ -211,7 +211,8 @@ board reads the inbox. So the service is told, in configuration, which
 collectors are expected to report, how often, and about what.
 
 Copy `infra/collector/collectors.example.json`, which declares the same
-collector and the same two surfaces as `collector.example.json` beside it:
+collectors and surfaces as `collector.example.json` and
+`collector-rig.example.json` beside it — one entry per machine:
 
 ```json
 {
@@ -219,11 +220,22 @@ collector and the same two surfaces as `collector.example.json` beside it:
     {
       "collector_id": "kevin-mac",
       "interval_seconds": 900,
-      "surfaces": ["host:disk/", "cron:morning-brief"]
+      "surfaces": ["host:mac/disk", "cron:morning-brief"]
+    },
+    {
+      "collector_id": "kevin-rig",
+      "interval_seconds": 900,
+      "surfaces": ["host:rig/disk"]
     }
   ]
 }
 ```
+
+`host:mac/disk` and `host:rig/disk` are deliberately distinct ids for the same
+kind of probe (`DiskProbe`'s `host` argument, set once per machine's config —
+see "Real surfaces" in `docs/surfaces.md`) — a full volume on one machine says
+nothing about the other, and a shared id would let one machine's healthy
+report paper over the other's fault.
 
 `collector_id` must match what the collector signs its batches with, and
 `interval_seconds` must match its `StartInterval` in the launchd plist (900
@@ -373,6 +385,16 @@ sed \
 launchd now runs the collector every 15 minutes (`StartInterval`, see the
 plist's own comment for why not a calendar interval) and once immediately
 (`RunAtLoad`). Logs land at `/tmp/deadman/collector.log`. To stop it:
+
+### Installing on a second machine (the rig)
+
+`infra/collector/collector-rig.example.json` is the same steps above with a
+different config file: same `disk` probe type, a different `collector_id`
+and `host` argument. No new probe code, because `DiskProbe` already answers
+"is this volume trending toward the floor" for any volume it is pointed at —
+adding a machine is naming it in a config file the way the disk probe
+docstring's "adding a surface is a config edit" claim is meant to be read.
+The rig has no morning-brief log, so its config carries only the disk probe.
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.deadman.collector.plist

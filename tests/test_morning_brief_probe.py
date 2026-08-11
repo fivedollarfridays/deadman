@@ -31,12 +31,14 @@ def test_missing_log_inside_existing_directory_is_fault(tmp_path) -> None:
 
 
 def test_missing_parent_directory_is_unobservable_not_fault(tmp_path) -> None:
-    probe = MorningBriefProbe(log_path=tmp_path / "nonexistent" / "brief.log")
+    log_path = tmp_path / "nonexistent" / "brief.log"
+    probe = MorningBriefProbe(log_path=log_path)
 
     evidence = probe.observe()
 
     assert evidence.observation is Observation.UNOBSERVABLE
     assert evidence.observation is not Observation.FAULT
+    assert evidence.detail["path"] == str(log_path)
 
 
 def test_fresh_mtime_with_stale_last_row_is_still_fault(tmp_path) -> None:

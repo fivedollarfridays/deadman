@@ -12,6 +12,7 @@ import json
 import shutil
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from deadman.evidence.model import Observation
 from deadman.probes.disk import GB, DiskProbe
@@ -69,6 +70,37 @@ def test_single_sample_is_healthy_with_no_trend(tmp_path, monkeypatch) -> None:
     assert evidence.detail["samples"] == 1
     assert evidence.detail["trend"] == "insufficient history"
     assert "slope_gb_per_day" not in evidence.detail
+
+
+def test_no_host_preserves_the_original_surface_id(tmp_path) -> None:
+    probe = DiskProbe(history_path=tmp_path / "disk-history.jsonl")
+
+    assert probe.surface == "host:disk/"
+
+
+def test_host_makes_the_surface_id_distinct_across_machines(tmp_path) -> None:
+    mac = DiskProbe(volume=Path("/"), host="mac", history_path=tmp_path / "mac.jsonl")
+    rig = DiskProbe(volume=Path("/"), host="rig", history_path=tmp_path / "rig.jsonl")
+
+    assert mac.surface != rig.surface
+    assert mac.surface == "host:mac/disk"
+    assert rig.surface == "host:rig/disk"
+
+
+def test_missing_volume_is_unobservable_with_the_path_in_detail(tmp_path, monkeypatch) -> None:
+    missing = tmp_path / "does-not-exist"
+
+    def fake_disk_usage(_path):
+        raise FileNotFoundError(f"[Errno 2] No such file or directory: '{missing}'")
+
+    monkeypatch.setattr(shutil, "disk_usage", fake_disk_usage)
+
+    probe = DiskProbe(volume=missing, history_path=tmp_path / "disk-history.jsonl")
+    evidence = probe.observe()
+
+    assert evidence.observation is Observation.UNOBSERVABLE
+    assert evidence.observation is not Observation.FAULT
+    assert evidence.detail["path"] == str(missing)
 
 
 def test_one_outlier_sample_does_not_flip_the_projection(tmp_path, monkeypatch) -> None:
