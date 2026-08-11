@@ -102,6 +102,30 @@ the body does not. And an `ActionResult` says `performed`, never `success` —
 whether the surface recovered is a fact about the surface, which only a fresh
 observation establishes. That is the verification loop.
 
+## The verification loop closes the honesty gap
+
+`deadman.remediate.verify` is the layer allowed to say a fault is gone, and it
+is the only one. `Remediation.result.performed` says a code path ran without
+raising; it is a fact about this process, not about the surface, and
+`verify_remediation` never reads it to decide success.
+
+What it does read: the *same probe that reported the fault*, re-run through
+the same never-raise contract (`run_probe`) detection uses. Only a fresh
+`Observation.HEALTHY` counts. A probe that goes blind on re-run comes back
+`UNOBSERVABLE`, not `HEALTHY` — being unable to tell whether a fix worked is
+still not a fix, so that reports `EXHAUSTED`/unverified rather than success.
+
+The probe has to be one the diagnosis actually cited — `verify_remediation`
+checks the probe's surface against the diagnosis's evidence ids and refuses
+an unrelated one, since re-observing the wrong surface would prove nothing
+about the fault that was acted on.
+
+Each attempt re-plans and re-executes against the same diagnosis and
+evidence, because the world can change under the action even when the inputs
+do not. That repeats only up to `max_attempts`: a surface still broken after
+the cap is `EXHAUSTED`, never retried forever — the AC this guards is
+"repeated failed remediation stops rather than looping".
+
 ## Correlating without a graph
 
 A lineage-graph monitor answers "what else does this affect?" by walking edges
