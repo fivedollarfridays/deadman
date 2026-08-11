@@ -64,7 +64,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 4 `done`, 1 `blocked`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 5 `done`, 1 `blocked`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -73,7 +73,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM2.7 | An alarm that actually reaches Kevin — **blocked** | P0 | 30 | claude-sonnet-5 | DM2.1 |
 | DM2.3 | The collector: sweep where the surfaces actually are ✓ | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health ✓ | P0 | 30 | claude-opus-5 | DM2.2 |
-| DM2.5 | Real surfaces, starting with the one already broken | P0 | 30 | claude-sonnet-5 | DM2.3 |
+| DM2.5 | Real surfaces, starting with the one already broken ✓ | P0 | 30 | claude-sonnet-5 | DM2.3 |
 | DM2.6 | Scheduled sweeps and scheduled self-check | P0 | 25 | claude-sonnet-5 | DM2.4 |
 | DM2.8 | The board grows a memory | P1 | 25 | claude-sonnet-5 | DM2.6 |
 | DM2.9 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | all |
@@ -124,6 +124,69 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.5 done: real surfaces, one already broken
+
+Wired the collector to actual infrastructure rather than synthetic tests. 9
+new tests (494 total, up from 485), all four gates clean.
+
+**The morning brief fault is captured for real, not described.**
+`MorningBriefProbe` was run this session against the real
+`~/ops/data/brief-send-log.jsonl`: `FAULT`, "no brief sent in 176.7h (window
+30h, ~7 missed)", last real send `2026-08-04T11:56:45`. That evidence is
+committed verbatim as `tests/fixtures/real-morning-brief-fault.json`
+(new directory, own README distinguishing it from `tests/recorded/`'s
+authored-or-captured *model* responses — this is a captured *probe* reading,
+no model involved), pinned by `tests/test_real_evidence_fixtures.py` so a
+future recapture that happened to land `HEALTHY` (the ops bug got fixed)
+would fail loudly rather than quietly stop being evidence of anything.
+DM2.9's case study reads from this rather than from memory.
+
+**Two machines, one probe, and a surface id that cannot collide.**
+`DiskProbe` gained a `host` field (`src/deadman/probes/disk.py`), blank by
+default so `service.py`'s own Cloud Run probes (`host:disk/`, watching the
+ephemeral container filesystem, unrelated to the real Mac or rig) are
+untouched. Set to `"mac"` or `"rig"` it produces `host:mac/disk` /
+`host:rig/disk` — a naming scheme every correlation/diagnose/ingest test
+fixture already assumed (`host:mac/disk` appears dozens of times across
+`tests/recorded/*.json` and elsewhere) but that no real probe had ever
+actually produced until now. `infra/collector/collector-rig.example.json` is
+new and is the entire proof of the "config edit plus an existing probe" AC:
+same `disk` probe type as the Mac's config, different `host`/`collector_id`,
+zero new probe code. `infra/collector/collectors.example.json` now declares
+both collectors.
+
+**"Missing path" got an explicit `detail["path"]`, not just an embedded
+string.** Both `DiskProbe`'s `unobservable()` call (missing volume) and
+`MorningBriefProbe._missing_log_result`'s (missing log directory) now pass
+`path=` explicitly, so a caller can read the misconfigured path without
+parsing an exception message out of `source`. Required updating
+`scripts/generate_samples.py`'s redaction step, since the new `detail.path`
+leaked the generator's temp directory into `sample-outputs/board.json` —
+`test_the_generator_is_deterministic` caught it immediately.
+
+**"Never hardcoded" is now asserted, not just structurally true.**
+`tests/test_collector_config.py::test_a_probes_real_path_comes_from_config_never_a_hardcoded_literal`
+builds two probes from two never-before-seen paths and asserts each probe's
+path matches its own config exactly and differs from the other's — round-trip
+proof rather than an inference from `build_probes`'s existing coercion tests.
+
+**`docs/surfaces.md` is new**: the concrete counterpart to
+`docs/ARCHITECTURE.md`'s abstract "Surfaces (v1)" table — real path, real
+cadence, and what blindness means, per surface actually deployed
+(`cron:morning-brief`, `host:mac/disk`, `host:rig/disk`), plus a three-step
+"adding another surface" recipe.
+
+Files: `src/deadman/probes/{disk,morning_brief}.py`, `docs/surfaces.md`,
+`docs/ARCHITECTURE.md`, `infra/README.md`, `infra/collector/
+{collector.example.json,collector-rig.example.json,collectors.example.json}`,
+`scripts/generate_samples.py`, `sample-outputs/board.json`,
+`tests/fixtures/{README.md,real-morning-brief-fault.json}`,
+`tests/test_real_evidence_fixtures.py`, and updates to four existing
+collector test files.
+
+Gates: `pytest -n auto --dist=worksteal` 494/494 (up from 485); `ruff check .`
+and `ruff format --check .` clean; `bpsai-pair arch check --strict` clean.
 
 ### Session: 2026-08-11 — DM2.4 done: absence no longer reads as health
 
@@ -1094,7 +1157,7 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2).** DM2.1, DM2.2, DM2.3 and DM2.4 are done. **DM2.7 is blocked**, not on
+**Now (DM2).** DM2.1, DM2.2, DM2.3, DM2.4 and DM2.5 are done. **DM2.7 is blocked**, not on
 code — every piece it needed to build is written, tested and mutation-checked
 — but on a real, working SMTP account to send through: `ops/.env`'s SMTP
 block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real sends
@@ -1105,10 +1168,15 @@ rail) to land, or point `DEADMAN_ALERT_*` at any other working SMTP account
 (a personal Gmail app password would do) and run the one-time verification
 script in `docs/alerting.md`'s last section. Once that one AC is checked,
 `bpsai-pair task update DM2.7 --status done` should pass on the first try —
-everything else is already checked off. **DM2.3 done unblocks DM2.5** (real
-surfaces) and **DM2.4 done unblocks DM2.6** (scheduling) — neither depends on
-DM2.7, so the sprint is not stalled by this. DM2.5 and DM2.6 are next, and
-they are a wave: `collector/surfaces.py` vs `service.py` + `infra/`.
+everything else is already checked off. **DM2.4 done unblocks DM2.6**
+(scheduling), which is next — neither depends on DM2.7, so the sprint is not
+stalled by this.
+
+DM2.6 inherits one change from DM2.5 worth flagging: `infra/collector/
+collectors.example.json` now declares **two** collectors (`kevin-mac` and
+`kevin-rig`), not one — whatever DM2.6 does with `DEADMAN_COLLECTORS` on the
+deployed service should keep pointing at that same file rather than
+special-casing the Mac.
 
 What DM2.6 inherits from DM2.4, and must not undo:
 
