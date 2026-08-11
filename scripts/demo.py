@@ -22,20 +22,17 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from demo_stubs import ScriptedClient, StubRelay  # noqa: E402
 
 from deadman.correlate.engine import Correlator  # noqa: E402
 from deadman.diagnose.engine import DiagnosisEngine  # noqa: E402
 from deadman.probes.base import blind_spots, sweep  # noqa: E402
-from deadman.probes.sms_relay import (  # noqa: E402
-    DispatchOutcome,
-    DispatchResult,
-    SmsRelayProbe,
-)
+from deadman.probes.sms_relay import SmsRelayProbe  # noqa: E402
 from deadman.remediate.actions import default_registry  # noqa: E402
 from deadman.remediate.alert import AlertChannel  # noqa: E402
 from deadman.remediate.executor import Executor  # noqa: E402
@@ -55,74 +52,121 @@ def beat(seconds: float = 0.6) -> None:
     time.sleep(seconds)
 
 
-@dataclass
-class StubRelay:
-    """Stands in for the phone. Broken until the queue is drained."""
-
-    broken: bool = True
-    sent: set[str] = field(default_factory=set)
-    attempts: int = 0
-
-    def send_canary(self, token: str) -> DispatchResult:
-        self.attempts += 1
-        if self.broken:
-            return DispatchResult(
-                outcome=DispatchOutcome.REJECTED,
-                why="relay host returned 503 Service Unavailable",
-                detail={"http_status": 503, "endpoint": "termux-sms-send"},
-            )
-        self.sent.add(token)
-        return DispatchResult(outcome=DispatchOutcome.ACCEPTED, detail={"http_status": 200})
-
-    def find(self, token: str) -> bool:
-        """Sent-folder reader: the only place a canary is confirmed."""
-        return token in self.sent
-
-
-@dataclass
-class ScriptedClient:
-    """A stand-in model for rehearsal, so the demo runs with no network.
-
-    **This is not a model and does not pretend to be one.** It reads the
-    evidence ids and summaries back out of the prompt and returns a
-    correctly-shaped response citing them. It exists because the committed
-    recordings cite fixed ids, while this demo generates fresh evidence with a
-    new canary token every run, so no static recording can ever resolve
-    against it.
-
-    The submitted demo runs with ``--live``. This path is for rehearsing the
-    sequence and for proving the *pipeline* end to end without spending a call.
-    """
-
-    model: str = "scripted-demo-stub"
-    temperature: float = 0.0
-
-    def complete(self, prompt: str) -> str:
-        import json
-        import re
-
-        ids = re.findall(r"^id: (.+)$", prompt, re.MULTILINE)
-        summaries = re.findall(r"^summary: (.+)$", prompt, re.MULTILINE)
-        citations = [{"evidence_id": i, "quote": s} for i, s in zip(ids, summaries, strict=False)]
-        return json.dumps(
-            {
-                "hypothesis": (
-                    "The relay host is refusing sends with a 503, which is an upstream "
-                    "outage rather than anything wrong with the credential or the "
-                    "message. The evidence does not say how long it will last."
-                ),
-                "confidence": 0.8,
-                "citations": citations,
-            }
-        )
-
-
 def _client(live: bool):
     if live:
         from deadman.diagnose.gemini import GeminiClient
 
         return GeminiClient()
     return ScriptedClient()
+
+
+def _show(evidence) -> None:
+    for row in evidence:
+        print(f"  {row.surface}  {row.observation.value.upper()}  via {row.method.value}")
+        print(f"     {row.summary}")
+
+
+def _sweep_and_record(probe, self_log):
+    evidence = sweep([probe])
+    self_log.record(sweep_size=len(evidence), blind=len(blind_spots(evidence)))
+    _show(evidence)
+    return evidence
+
+
+def _stage_break(relay: StubRelay) -> None:
+    stage(2, "Break it. The relay host starts refusing sends.")
+    relay.broken = True
+    print("  the phone relay now answers 503 Service Unavailable")
+    print("  nothing tells deadman this happened. It has to notice.")
+
+
+def _stage_diagnose(engine, evidence, live: bool):
+    stage(4, f"Diagnose{' with live Gemini' if live else ' (scripted stub, no network)'}.")
+    diagnosis = engine.diagnose(evidence)
+    print(f"  status     : {diagnosis.status.value}")
+    print(f"  confidence : {diagnosis.confidence}")
+    print(f"  hypothesis : {diagnosis.hypothesis}")
+    print(f"  cites      : {', '.join(diagnosis.evidence_ids) or '(nothing)'}")
+    for reason in diagnosis.rejected_claims:
+        print(f"  REJECTED   : {reason}")
+    return diagnosis
+
+
+def _stage_correlate(engine, evidence) -> None:
+    stage(5, "One fault is not a pattern.")
+    incidents = Correlator(diagnosis=engine).correlate(evidence)
+    print(f"  correlated incidents: {len(incidents)}")
+    print("  A single isolated fault never invents a correlation. Co-occurrence is")
+    print("  the whole basis for inferring a shared cause, and there is none here.")
+
+
+def _stage_select(executor, diagnosis, evidence):
+    stage(6, "Select. Deterministic, and keyed on the cause rather than the fault.")
+    plan = executor.plan(diagnosis, evidence)
+    print(f"  cause    : {plan.cause.value}")
+    print(f"  decision : {plan.decision.value}")
+    print(f"  action   : {plan.action}")
+    print(f"  reason   : {plan.reason}")
+    print("\n  A 5xx earns an immediate retry. An expired credential would not:")
+    print("  re-queueing that fails identically and burns the rate limit.")
+    return plan
+
+
+def _stage_verify(executor, probe, diagnosis, evidence):
+    stage(7, "Act, then prove it. Success is a fresh observation, not a return value.")
+    outcome = verify_remediation(executor, probe, diagnosis, evidence)
+    print(f"  status   : {outcome.status.value}")
+    print(f"  attempts : {len(outcome.attempts)}")
+    for attempt in outcome.attempts:
+        taken = attempt.remediation.plan
+        seen = attempt.reobservation
+        print(f"     acted   : {taken.action} ({taken.decision.value})")
+        if seen is not None:
+            print(f"     re-read : {seen.surface} -> {seen.observation.value.upper()}")
+            print(f"               {seen.summary}")
+    print("\n  The executor returning True proves the code ran. It does not prove the")
+    print("  rail recovered. The probe was re-run to establish that separately.")
+    return outcome
+
+
+def _stage_self_check(self_log, work: Path) -> bool:
+    stage(8, "And who watches this? It has to answer that itself.")
+    sent: list[str] = []
+    channel = AlertChannel(
+        transport="email:ops@example.com",
+        send=sent.append,
+        monitored=("sms:relay", "cron:morning-brief", "host:disk/"),
+    )
+    live_result = run_self_check(self_log, window_hours=30, channel=channel)
+    print(f"  self-check : {live_result.liveness.value} (exit {live_result.exit_code})")
+
+    dead = run_self_check(SelfEvidenceLog(path=work / "never-ran.jsonl"), 30, channel)
+    print(f"  if it died : {dead.liveness.value} (exit {dead.exit_code})")
+    print(f"  alerts out of band: {len(sent)}")
+    print("\n  The alarm cannot travel over a rail deadman watches. Configuring it on")
+    print("  sms:relay raises at startup, because a self-concealing outage is what")
+    print("  this whole system exists to prevent.")
+
+    return live_result.liveness is Liveness.LIVE and dead.exit_code != 0 and len(sent) == 1
+
+
+def _verdict(ok: bool, outcome, elapsed: float) -> int:
+    print(f"\n{RULE}")
+    if ok and outcome.status.value == "verified":
+        print("  DEMO COMPLETE — broke it, found it, fixed it, proved it")
+    elif ok and outcome.status.value == "not_attempted":
+        # Not a failure, and saying so would be the dishonesty this project is
+        # against. On roughly one run in four the model returns a correct-
+        # sounding hypothesis citing nothing, grounding throws it out, and
+        # nothing is allowed to act on it. That is the system working.
+        print("  DEMO COMPLETE — the model did not ground its answer, so nothing acted")
+        print("  This is the designed behaviour, not a crash. An uncited hypothesis")
+        print("  never reaches an action. Re-run to see the heal path.")
+    else:
+        print("  DEMO FAILED — a deterministic step did not hold")
+    print(f"  {elapsed:.1f}s")
+    print(RULE)
+    return 0 if ok else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -144,123 +188,37 @@ def main(argv: list[str] | None = None) -> int:
             cadence_hours=0.0,  # every sweep dispatches; this is a demo, not a duty cycle
         )
         self_log = SelfEvidenceLog(path=work / "self-evidence.jsonl")
+        engine = DiagnosisEngine(client=_client(args.live))
+        executor = Executor(
+            registry=default_registry(),
+            capabilities=Capabilities(requeue=lambda surface: _drain(relay, surface)),
+        )
 
         stage(1, "Healthy. The canary goes out and comes back.")
-        evidence = sweep([probe])
-        self_log.record(sweep_size=len(evidence), blind=len(blind_spots(evidence)))
-        for row in evidence:
-            print(f"  {row.surface}  {row.observation.value.upper()}  via {row.method.value}")
-            print(f"     {row.summary}")
+        _sweep_and_record(probe, self_log)
         pause()
 
-        stage(2, "Break it. The relay host starts refusing sends.")
-        relay.broken = True
-        print("  the phone relay now answers 503 Service Unavailable")
-        print("  nothing tells deadman this happened. It has to notice.")
+        _stage_break(relay)
         pause()
 
         stage(3, "Detected, by manufacturing the evidence rather than waiting.")
-        evidence = sweep([probe])
-        self_log.record(sweep_size=len(evidence), blind=len(blind_spots(evidence)))
-        for row in evidence:
-            print(f"  {row.surface}  {row.observation.value.upper()}  via {row.method.value}")
-            print(f"     {row.summary}")
+        evidence = _sweep_and_record(probe, self_log)
         print("\n  Silence on this rail is ambiguous: no traffic and a dead rail look")
         print("  identical. The probe never infers health from quiet, it sends its own")
         print("  message and reads the destination back.")
         pause()
 
-        stage(4, f"Diagnose{' with live Gemini' if args.live else ' (scripted stub, no network)'}.")
-        engine = DiagnosisEngine(client=_client(args.live))
-        diagnosis = engine.diagnose(evidence)
-        print(f"  status     : {diagnosis.status.value}")
-        print(f"  confidence : {diagnosis.confidence}")
-        print(f"  hypothesis : {diagnosis.hypothesis}")
-        print(f"  cites      : {', '.join(diagnosis.evidence_ids) or '(nothing)'}")
-        for reason in diagnosis.rejected_claims:
-            print(f"  REJECTED   : {reason}")
+        diagnosis = _stage_diagnose(engine, evidence, args.live)
         pause()
-
-        stage(5, "One fault is not a pattern.")
-        incidents = Correlator(diagnosis=engine).correlate(evidence)
-        print(f"  correlated incidents: {len(incidents)}")
-        print("  A single isolated fault never invents a correlation. Co-occurrence is")
-        print("  the whole basis for inferring a shared cause, and there is none here.")
+        _stage_correlate(engine, evidence)
         pause()
-
-        stage(6, "Select. Deterministic, and keyed on the cause rather than the fault.")
-        executor = Executor(
-            registry=default_registry(),
-            capabilities=Capabilities(requeue=lambda surface: _drain(relay, surface)),
-        )
-        plan = executor.plan(diagnosis, evidence)
-        print(f"  cause    : {plan.cause.value}")
-        print(f"  decision : {plan.decision.value}")
-        print(f"  action   : {plan.action}")
-        print(f"  reason   : {plan.reason}")
-        print("\n  A 5xx earns an immediate retry. An expired credential would not:")
-        print("  re-queueing that fails identically and burns the rate limit.")
+        _stage_select(executor, diagnosis, evidence)
         pause()
-
-        stage(7, "Act, then prove it. Success is a fresh observation, not a return value.")
-        outcome = verify_remediation(executor, probe, diagnosis, evidence)
-        print(f"  status   : {outcome.status.value}")
-        print(f"  attempts : {len(outcome.attempts)}")
-        for attempt in outcome.attempts:
-            plan_taken = attempt.remediation.plan
-            seen = attempt.reobservation
-            print(f"     acted   : {plan_taken.action} ({plan_taken.decision.value})")
-            if seen is not None:
-                print(f"     re-read : {seen.surface} -> {seen.observation.value.upper()}")
-                print(f"               {seen.summary}")
-        print("\n  The executor returning True proves the code ran. It does not prove the")
-        print("  rail recovered. The probe was re-run to establish that separately.")
+        outcome = _stage_verify(executor, probe, diagnosis, evidence)
         pause()
+        ok = _stage_self_check(self_log, work)
 
-        stage(8, "And who watches this? It has to answer that itself.")
-        alert_sent: list[str] = []
-        channel = AlertChannel(
-            transport="email:ops@example.com",
-            send=alert_sent.append,
-            monitored=("sms:relay", "cron:morning-brief", "host:disk/"),
-        )
-        live_result = run_self_check(self_log, window_hours=30, channel=channel)
-        print(f"  self-check : {live_result.liveness.value} (exit {live_result.exit_code})")
-
-        dead = SelfEvidenceLog(path=work / "never-ran.jsonl")
-        dead_result = run_self_check(dead, window_hours=30, channel=channel)
-        print(f"  if it died : {dead_result.liveness.value} (exit {dead_result.exit_code})")
-        print(f"  alerts out of band: {len(alert_sent)}")
-        print("\n  The alarm cannot travel over a rail deadman watches. Configuring it on")
-        print("  sms:relay raises at startup, because a self-concealing outage is what")
-        print("  this whole system exists to prevent.")
-
-        # The self-liveness half must always hold: it is deterministic.
-        ok = (
-            live_result.liveness is Liveness.LIVE
-            and dead_result.exit_code != 0
-            and len(alert_sent) == 1
-        )
-
-        healed = outcome.status.value == "verified"
-        refused = outcome.status.value == "not_attempted"
-
-    print(f"\n{RULE}")
-    if ok and healed:
-        print("  DEMO COMPLETE — broke it, found it, fixed it, proved it")
-    elif ok and refused:
-        # Not a failure, and saying so would be the dishonesty this project is
-        # against. On roughly one run in four the model returns a correct-
-        # sounding hypothesis citing nothing, grounding throws it out, and
-        # nothing is allowed to act on it. That is the system working.
-        print("  DEMO COMPLETE — the model did not ground its answer, so nothing acted")
-        print("  This is the designed behaviour, not a crash. An uncited hypothesis")
-        print("  never reaches an action. Re-run to see the heal path.")
-    else:
-        print("  DEMO FAILED — a deterministic step did not hold")
-    print(f"  {time.time() - started:.1f}s")
-    print(RULE)
-    return 0 if ok else 1
+    return _verdict(ok, outcome, time.time() - started)
 
 
 def _drain(relay: StubRelay, surface: str) -> bool:
