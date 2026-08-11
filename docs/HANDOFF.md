@@ -98,12 +98,19 @@ collision found and resolved by serialising DM2.8 behind DM2.6.
 
 ## Decisions waiting on Kevin
 
-**1. The `ops` repo has 82 changed paths staged and uncommitted.** Includes the
-bpsai-pair payload upgrade: new hooks, `CLAUDE.md`, `settings.json`,
-`.paircoder/` config, plus deletions. This is the state an agent destroyed once
-already; it survived only because it was recovered from a dangling commit.
-Preserving it on a branch costs one commit. **Not done, because it is Kevin's
-repo state and he had not answered.**
+**1. RESOLVED — the `ops` working tree is committed.** The bpsai-pair v2.42.0
+payload upgrade and two driver learnings are on
+`chore/session-2026-08-07-bookkeeping`, pushed to origin, as commits `50d42c30`
+and `7c99a599`. That upgrade had been sitting uncommitted long enough that an
+agent destroyed it once and it survived only via a dangling commit; the next
+accident is now a revert rather than a recovery. The staged diff was checked for
+credential-shaped keys, long encoded blobs and `.env` paths before committing.
+
+No tracked changes remain in `ops`. What is still untracked is junk that was
+deliberately not committed: **62 Playwright console logs** under
+`.playwright-mcp/`, which is not in `.gitignore`, so they will keep reappearing
+in every `git status` until one ignore line is added. Kevin was asked and had
+not answered.
 
 **2. Nobody has verified the actual contest rules.** Everything treated as a
 platform requirement, Gemini 3.5 Flash via ADK plus one Google Cloud service and
@@ -202,16 +209,17 @@ Carried over, unresolved:
    deadline and is killed, exit 124. deadman's probe found it. The hang is an
    ops repo bug nobody has diagnosed.
 
-2. The ops repo has 82 changed paths staged and uncommitted, including the
-   bpsai-pair payload upgrade. Ask me whether to preserve it on a branch
-   before doing anything that could touch that tree.
-
-3. Nobody has verified the actual contest rules. Everything treated as a
+2. Nobody has verified the actual contest rules. Everything treated as a
    platform requirement traces back to a brief Claude wrote itself. Pull the
    real judging criteria before optimizing for them.
 
-4. Repo fivedollarfridays/deadman is still PRIVATE and must be public before
+3. Repo fivedollarfridays/deadman is still PRIVATE and must be public before
    judging. The $25 GCP budget alert is unset. The Vertex service account key
    at ~/.deadman-creds/vertex-sa.json on the rig should be deleted after the
    contest.
+
+4. The ops working tree is committed and pushed on
+   chore/session-2026-08-07-bookkeeping, so nothing is at risk there. Still
+   untracked: 62 Playwright console logs under .playwright-mcp/, which is not
+   gitignored. Ask me before adding the ignore line.
 ```
