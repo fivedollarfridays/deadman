@@ -18,10 +18,10 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, and DM1.9 are `done`. DM1.8 is `blocked` on
-a live GCP deploy step this session cannot perform (see Blockers). With the
-DM1.5 hub landed, **DM1.6 (remediation registry, P0) and DM1.10 (correlation)
-are unblocked**; DM1.11 still waits on DM1.8.
+DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, and DM1.9 are `done`. DM1.8 is
+`blocked` on a live GCP deploy step this session cannot perform (see Blockers).
+With DM1.6 landed, **DM1.7 (verification loop, P0) is unblocked**, as is
+DM1.10 (correlation); DM1.11 still waits on DM1.8.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -29,7 +29,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.5 and DM1.9 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.6 and DM1.9 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -38,7 +38,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.3 | Brief + disk probe tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.4 | Metricool probe + verification spike ✓ | P1 | 35 | claude-opus-5 | DM1.1 |
 | DM1.5 | Diagnosis layer on Gemini via ADK ✓ | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
-| DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
+| DM1.6 | Remediation registry and executor ✓ | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
 | DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
@@ -57,6 +57,79 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.6 remediation registry and executor (`/start-task DM1.6`)
+
+- **The question this turned on:** the diagnosis is a hypothesis in *prose*, so
+  what does "selection keys on the diagnosis" mean without the model's words
+  becoming the key? The answer taken here splits the decision in three, and the
+  seam is the whole design:
+  - **which evidence rows are causal** — the model. That is inference over
+    messy heterogeneous failure material, the part a rule engine cannot do.
+  - **what those rows mean** — `remediate/cause.py`, rules written in advance,
+    reading only material probe code wrote (status codes, error codes,
+    probe-authored summaries), returning a value from a closed `Cause` enum.
+  - **what to do about it** — `remediate/registry.py`, a table from `Cause` to
+    a function that existed before the run.
+  No string a model produced is ever a key, an argument, or a body. A
+  hallucinating model can push selection toward the wrong *registered* action;
+  it cannot reach an action nobody wrote.
+- **The test that makes the AC real** is a bundle, not an assertion.
+  `tests/recorded/bundle-metricool-publish-failure.json` holds one fault class —
+  a scheduled post absent at the destination — with four candidate causes beside
+  it. Four recordings cite different rows of it, so the fault is held constant
+  and only the diagnosis varies: `retry-now` vs `refresh-credential` vs
+  escalate. `grounded-expired-credential` is deliberately adversarial — fully
+  grounded, every cited fact checks out, and its prose says in plain English to
+  "retry ... and re-queue the post right away". No retry is selected, because
+  selection reads the cited evidence and not the sentence.
+- **Precedence, because two causes can be true at once.** A diagnosis citing a
+  503 *and* a lapsed token would earn a retry on the first and be doomed by the
+  second. `PRECEDENCE` orders causes by how harmful acting on a lower one is
+  while a higher holds, and is asserted total over `Cause` — a missing member
+  would sort arbitrarily, which is exactly how a retry sneaks ahead of a
+  credential failure.
+- **Causes with no action, on purpose.** Policy refusal and disconnected
+  channel are classified confidently and have nothing registered against them:
+  re-queueing a post the platform refused burns rate limit against a decision
+  already made, and re-sending to an unwired channel succeeds locally and
+  delivers nothing. Six refusal branches in `Executor._refusal` in all —
+  diagnosis not grounded (covering both `UNGROUNDED` and `UNAVAILABLE`), cited
+  evidence unresolvable, failure unrecognised, no action registered, confidence
+  under floor, capability unwired — each with a test.
+- **The confidence cap from DM1.5 now does work.** Every action floor sits
+  above `Method.REPORTED`'s 0.4 ceiling, asserted as an invariant, so a
+  hypothesis leaning on a scheduler's "it published fine" can never move
+  infrastructure however confidently phrased. `grounded-disk-cascade` claims
+  0.7, is capped to 0.4, and escalates.
+- **Dry run is the default** — a wet run has to be asked for, and the plan is
+  the same object either way (asserted by equality), so a rehearsal is a
+  rehearsal rather than documentation. `ActionResult` carries `performed`, never
+  `success`, with a test pinning the field set: whether the surface recovered is
+  a fact about the surface, and that is DM1.7's to establish.
+- **Every one of the eight behaviours was mutation-checked** rather than
+  assumed from a green first run — the suite passed 40/40 on the first
+  execution, which is precisely when a test file deserves suspicion. Inverting
+  each guard in turn (precedence order, 429-as-transient, classifying
+  healthy/blind rows, ignoring `dry_run`, dropping the `is_actionable` gate,
+  dropping the confidence floor, dropping the capability check, skipping the
+  generated-body guard) broke a specific named test each time. Worth recording
+  from that exercise: a pure-reorder mutation is the same file size, and if the
+  edit and the restore land in the same second Python reuses the stale `.pyc` —
+  one "clean" run was in fact still executing mutated bytecode. Purge
+  `__pycache__` or set `PYTHONDONTWRITEBYTECODE=1` when mutation-testing.
+- Files: `src/deadman/remediate/{__init__,cause,registry,actions,executor}.py`,
+  `tests/test_remediate_{cause,selection,executor}.py`, one bundle and five
+  recordings under `tests/recorded/` (+ README), `docs/ARCHITECTURE.md`.
+- Gates: `pytest tests/` 158/158 (up from 117); `ruff check .` clean;
+  `bpsai-pair arch check --strict` clean.
+- **Not wired into `service.py` yet, deliberately.** DM1.7 is the natural call
+  site — it re-observes after a remediation, and an executor plumbed into the
+  board without it would report actions taken with nothing checking whether
+  they helped, which is the heartbeat problem this project argues against.
+  `Capabilities` is the injection point: all three are optional, default to
+  absent, and an unwired capability escalates rather than planning around
+  itself. Nothing real is wired to anyone's infrastructure yet.
 
 ### Session: 2026-08-11 — DM1.5 diagnosis layer on Gemini via ADK (`/start-task DM1.5`)
 
@@ -384,17 +457,20 @@ retiring the seven existing point-solution monitors.
    satisfy contest eligibility, which requires a real Gemini call. Save the raw
    response into `tests/recorded/` as a genuine capture and retire the authored
    one; nothing in the engine changes, it only ever sees a string.
-2. DM1.5 is done, so **DM1.6 (remediation registry) and DM1.10 (correlation)
-   are both unblocked** — DM1.6 is the P0 and the Taskmaster requirement.
-3. DM1.6 should key on `Diagnosis.is_actionable`, not on status directly.
-   An `UNGROUNDED` or `UNAVAILABLE` diagnosis must escalate, never select an
-   action — that is the "no matching action escalates rather than guessing" AC
-   and the reason the flag exists.
-4. DM1.10 can reuse `tests/recordings.py` and the `bundle-*.json` envelope
+2. DM1.6 is done, so **DM1.7 (verification loop) is unblocked** and is the next
+   P0. It is also the intended call site for `deadman.remediate` — nothing
+   imports the executor yet, on purpose. Points to reuse:
+   `Executor.execute(..., dry_run=False)` returns a `Remediation` whose
+   `result.performed` says only that the code ran; the loop must re-run the
+   originating probe and require a fresh `Observation.HEALTHY`.
+   `RemediationPlan.evidence_ids` names the surfaces to re-observe, and
+   `test_an_action_result_does_not_claim_the_fault_is_fixed` pins the field set
+   so no future edit lets the executor declare victory.
+3. DM1.10 can reuse `tests/recordings.py` and the `bundle-*.json` envelope
    for its own recorded-evidence cases; the disk-cascade bundle it needs
    ("disk fills, then everything dies") is already there and already carries a
    blind surface alongside the two faults.
-5. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
+4. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
    deploy lands.
 
 ## Blockers
