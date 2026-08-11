@@ -2,7 +2,7 @@
 id: DM1.11
 title: Self-liveness and out-of-band alerting
 plan: plan-sprint-1-engage
-status: in_progress
+status: done
 sprint: '1'
 depends_on:
 - DM1.8
@@ -14,6 +14,7 @@ type: feature
 model: claude-sonnet-5
 base_branch: main
 ac_verified: null
+completed_at: '2026-08-11T04:21:58.031842+00:00'
 ---
 
 # Self-liveness and out-of-band alerting
