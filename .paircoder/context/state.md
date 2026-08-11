@@ -125,6 +125,66 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+### Session: 2026-08-11 — DM2 IS LIVE, and deploying it found a bug nothing else could
+
+**The service now runs DM2**, image tag `6d6ad33`, matching `main` exactly,
+revision `deadman-00010-t6g`, at https://deadman-mrapac5nda-uc.a.run.app.
+
+**Correction to the previous entry: `gcloud` was never missing.** It is at
+`/home/kmasty/google-cloud-sdk/bin/gcloud` on the rig, already authenticated as
+`kmasty1@gmail.com` against `deadman-20260810`. It is simply not on the PATH a
+non-interactive `ssh` gets, so `command -v gcloud` reported nothing. The earlier
+"gcloud is on neither machine" claim was wrong.
+
+**Deploying DM2 required three things that did not exist**, each of which would
+have crash-looped the service on its own:
+
+1. **Firestore was never enabled** and had no database. `cloudbuild.yaml` sets
+   `DEADMAN_STORE_BACKEND=firestore` and the backend raises at construction.
+   Enabled, database created at `nam5` per `infra/README.md`, whose runbook was
+   correct.
+2. **Neither secret was set on the service.** DM1 needed none; DM2 refuses to
+   start without both. Created in Secret Manager, `roles/secretmanager.
+   secretAccessor` bound to the runtime account, and attached to the *existing*
+   revision first so DM2 landed into an environment that already satisfied its
+   startup check.
+3. `roles/datastore.user` for the Cloud Run runtime account.
+
+**The bug the deploy found: every `POST /evidence` hung until Cloud Run
+returned 504 after five minutes.** `GET /` was fine. `_read_body` asked the
+socket for `MAX_BODY_BYTES + 1` regardless of `Content-Length`, and
+`wsgiref.simple_server` hands over the raw socket file object, so it blocked
+waiting for 256 KiB the client never sent. **The one endpoint this whole sprint
+exists to add was unusable over real HTTP**, and 568 tests plus a 13-finding
+security audit all missed it, because every in-process test builds `environ`
+around an `io.BytesIO` — a stream that cannot block cannot reproduce a block.
+Fixed and merged (PR #9); `tests/test_ingest_body_read.py` asserts the
+*requested size* rather than the bytes returned, which is the thing that
+differs between a BytesIO and a socket.
+
+**Verified against the running service, not the build's SUCCESS:**
+
+- `GET /` 200 in 0.06s, and **the redaction is live**: the board shows
+  `"withheld": ["path"]` and `"source": "morning-brief.jsonl"` rather than the
+  absolute path. Zero occurrences of `/Users/`, `/home/` or the username.
+- `POST /evidence` unsigned → **401 in 0.06s** (was a 504 after five minutes).
+- `POST /evidence` correctly signed → `{"accepted": 1, "stored": 1}`.
+- Replayed identical batch → `{"stored": 0, "duplicates": 1}`. **That is also
+  the persistence proof**: the dedupe check reads history back out of
+  Firestore, so it could only recognise the duplicate if the first row was
+  durably stored.
+
+**One trap closed:** `openssl rand -hex` emits a trailing newline and
+`secret_from_env` encodes the value verbatim, so the stored secret ended in
+`\n` while a collector exporting it from a shell file would not — a signature
+mismatch with no visible cause. Both secrets rewritten without it (version 2)
+and the revision bounced. **Worth considering in code**: stripping the secret in
+`secret_from_env` would make the two agree regardless of how each side stores
+it.
+
+Left behind deliberately: a `smoke:deploy-check` surface in Firestore from the
+end-to-end proof. Harmless, and it is the evidence the rail works.
+
 ### Session: 2026-08-11 — DM2 merged (PR #7) after closing ten security findings
 
 **The sprint shipped seven of nine tasks, and the security gate was right to
