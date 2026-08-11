@@ -1,0 +1,62 @@
+{
+  "note": "One fault class, several candidate causes. Every row here says 'a scheduled post did not reach the destination' — the rows differ only in why. This bundle exists so a test can hold the fault constant and vary the diagnosis, which is the whole argument of DM1.6.",
+  "evidence": [
+    {
+      "surface": "metricool:fwtx_dao",
+      "observation": "fault",
+      "method": "destination_public",
+      "summary": "post 8891 reported published but absent at the destination",
+      "source": "GET https://x.com/fwtx_dao/status/8891",
+      "read_at": "2026-08-11T04:00:00+00:00",
+      "detail": {
+        "post_id": "8891",
+        "destination_state": "absent",
+        "http_status": 404
+      }
+    },
+    {
+      "surface": "metricool:api/publish",
+      "observation": "fault",
+      "method": "destination_api",
+      "summary": "publish attempt for post 8891 was refused upstream",
+      "source": "POST https://api.metricool.com/v1/publish",
+      "read_at": "2026-08-11T04:00:00+00:00",
+      "detail": {
+        "post_id": "8891",
+        "http_status": 503,
+        "error_code": "upstream_unavailable",
+        "body": "service temporarily unavailable, try again later",
+        "retry_after_seconds": 0
+      }
+    },
+    {
+      "surface": "metricool:auth/fwtx_dao",
+      "observation": "fault",
+      "method": "destination_api",
+      "summary": "credential check for channel fwtx_dao failed",
+      "source": "GET https://api.metricool.com/v1/channels/fwtx_dao",
+      "read_at": "2026-08-11T04:00:00+00:00",
+      "detail": {
+        "http_status": 401,
+        "error_code": "token_expired",
+        "body": "the access token expired at 2026-08-09T00:00:00Z",
+        "channel": "fwtx_dao"
+      }
+    },
+    {
+      "surface": "metricool:api/review",
+      "observation": "fault",
+      "method": "destination_api",
+      "summary": "post 8892 was refused by the platform content review",
+      "source": "POST https://api.metricool.com/v1/publish",
+      "read_at": "2026-08-11T04:00:00+00:00",
+      "detail": {
+        "post_id": "8892",
+        "http_status": 403,
+        "error_code": "policy_violation",
+        "body": "caption contains a disallowed link",
+        "channel": "fwtx_dao"
+      }
+    }
+  ]
+}

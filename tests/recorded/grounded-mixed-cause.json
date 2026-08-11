@@ -1,0 +1,9 @@
+{
+  "note": "Two causes cited in one story. A retry is technically indicated by one of them and structurally doomed by the other, which is why precedence exists.",
+  "captured": false,
+  "bundle": "bundle-metricool-publish-failure",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"Two things are wrong at once on this channel: the upstream publish endpoint was briefly refusing calls, and the channel credential has separately lapsed. Either alone would explain a missing post.\", \"confidence\": 0.75, \"citations\": [{\"evidence_id\": \"metricool:api/publish#f33e33ac\", \"quote\": \"http_status=503\"}, {\"evidence_id\": \"metricool:auth/fwtx_dao#fe54713d\", \"quote\": \"error_code=token_expired\"}]}"
+}

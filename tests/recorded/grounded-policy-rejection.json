@@ -1,0 +1,9 @@
+{
+  "note": "The cause with no action behind it on purpose. A post refused on content policy cannot be fixed by any code in this repo; re-queueing it is worse than doing nothing.",
+  "captured": false,
+  "bundle": "bundle-metricool-publish-failure",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"The platform's content review refused this post over a link in the caption. The account and the transport are both fine; the artifact itself is what was rejected, so nothing will change until the caption does.\", \"confidence\": 0.9, \"citations\": [{\"evidence_id\": \"metricool:api/review#e856ed34\", \"quote\": \"error_code=policy_violation\"}, {\"evidence_id\": \"metricool:api/review#e856ed34\", \"quote\": \"caption contains a disallowed link\"}]}"
+}

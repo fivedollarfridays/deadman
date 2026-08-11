@@ -1,0 +1,9 @@
+{
+  "note": "A correct, grounded diagnosis of a fault nobody wrote a rule for. It cites only the absence itself — no status, no error code, nothing a classifier recognises. The right answer is a human.",
+  "captured": false,
+  "bundle": "bundle-metricool-publish-failure",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"The post is simply not at the destination. Nothing in the evidence says why, and none of the failure signals present elsewhere in this sweep name this post, so the reason is somewhere we did not look.\", \"confidence\": 0.8, \"citations\": [{\"evidence_id\": \"metricool:fwtx_dao#f45428ca\", \"quote\": \"post 8891 reported published but absent at the destination\"}, {\"evidence_id\": \"metricool:fwtx_dao#f45428ca\", \"quote\": \"destination_state=absent\"}]}"
+}

@@ -1,0 +1,9 @@
+{
+  "note": "Same fault as grounded-expired-credential, different cause cited. A transient upstream refusal is the one case where re-queueing immediately is the right move.",
+  "captured": false,
+  "bundle": "bundle-metricool-publish-failure",
+  "model": "gemini-3.5-flash",
+  "temperature": 0.0,
+  "prompt_version": "diagnose/v1",
+  "response": "{\"hypothesis\": \"The post never reached the destination because the publish call itself was refused by the upstream platform while it was briefly unavailable, not because anything about the account or the content is wrong. The refusal carries no backoff hint, so the window has most likely already closed.\", \"confidence\": 0.8, \"citations\": [{\"evidence_id\": \"metricool:api/publish#f33e33ac\", \"quote\": \"http_status=503\"}, {\"evidence_id\": \"metricool:api/publish#f33e33ac\", \"quote\": \"service temporarily unavailable, try again later\"}, {\"evidence_id\": \"metricool:fwtx_dao#f45428ca\", \"quote\": \"destination_state=absent\"}]}"
+}

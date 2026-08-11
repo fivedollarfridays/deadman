@@ -16,7 +16,7 @@ is alive, when every thing is different?"**
 |---|---|---|
 | **Detect** | ✅ free bytes, mtime, does post ID exist | |
 | **Diagnose** | | ✅ read heterogeneous failure evidence, form causal hypothesis |
-| **Select action** | | ✅ the right remediation depends on the diagnosis |
+| **Select action** | ✅ closed table, cause → function | ✅ the model decides which evidence is causal; that choice is what changes the action |
 | **Correlate** | | ✅ infer shared root cause across surfaces (no lineage graph exists) |
 | **Execute** | ✅ re-queue, free cache, restart, failover | |
 | **Verify fix** | ✅ same capture-evidence standard as detection | |
@@ -65,6 +65,42 @@ A Metricool post that failed to publish:
 
 The action space is too wide to hardcode and the correct choice requires
 understanding *why*. That is the agentic decision.
+
+## How the model chooses without the model acting
+
+`deadman.remediate` splits that decision in two, and the seam is the whole
+design.
+
+| | Who decides | On what |
+|---|---|---|
+| **Which evidence is causal** | the model | messy heterogeneous failure material — the thing a rule engine cannot read |
+| **What that evidence means** | `remediate.cause` | status codes, error codes, probe-authored summaries. Rules written in advance, output a value from a closed enum |
+| **What to do about it** | `remediate.registry` | a table from cause to a function that existed before the run |
+
+No string a model produced is ever a key, an argument, or a body. A model that
+hallucinates can push selection toward the wrong *registered* action; it cannot
+reach an action nobody wrote. `Registry.register` refuses any callable with no
+source file behind it, which is what an `exec`-built body looks like — that
+stops the obvious route and is not a sandbox, and the module says so.
+
+Every path that cannot establish all three refuses:
+
+- the diagnosis was `UNGROUNDED` or `UNAVAILABLE` — acting on it would be
+  acting on a fact the model made up, or on our own blindness;
+- no rule recognised the failure. The tempting default is "probably transient,
+  retry it", and that default is wrong in exactly the cases that matter;
+- the cause is recognised and has **no action on purpose**. A policy refusal
+  and a disconnected channel both escalate, because re-queueing is worse than
+  doing nothing for one and delivers nowhere for the other;
+- the confidence the cited evidence can carry is under the action's floor.
+  Every floor sits above `Method.REPORTED`'s 0.4 ceiling, so a hypothesis
+  leaning on a scheduler's "it published fine" can never move infrastructure;
+- the capability the action needs is not wired up.
+
+**Dry run is the default.** Selection, classification and reporting all happen;
+the body does not. And an `ActionResult` says `performed`, never `success` —
+whether the surface recovered is a fact about the surface, which only a fresh
+observation establishes. That is the verification loop.
 
 ## Deployment
 
