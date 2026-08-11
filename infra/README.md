@@ -155,6 +155,7 @@ for.
 |---|---|---|
 | `PORT` | `8080` | Set by Cloud Run automatically; the service reads it. |
 | `DEADMAN_INGEST_SECRET` | **none — the service refuses to start** | Shared secret a collector signs its batches with. See "Ingest" below. |
+| `DEADMAN_SCHEDULER_SECRET` | **none — the service refuses to start** | Bearer token Cloud Scheduler sends to trigger the scheduled self-check. See `infra/scheduler.md`. |
 | `DEADMAN_STORE_BACKEND` | `memory` | `firestore` or `memory`. `cloudbuild.yaml` sets `firestore` on deploy; the `memory` default is for local runs only, and on Cloud Run it would forget the estate on every scale-to-zero. |
 | `DEADMAN_FIRESTORE_PROJECT` | the SDK's default | GCP project holding the Firestore database. |
 | `DEADMAN_COLLECTORS` | unset — **the service warns on stderr and watches nobody's silence** | Path to the collector liveness declaration (see "Collector liveness" below). A named file that cannot be read or parsed is a startup failure. |

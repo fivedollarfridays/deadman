@@ -26,13 +26,21 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
+from deadman.evidence.model import Evidence, Method, Observation
 from deadman.remediate.alert import AlertChannel
+from deadman.store.base import EvidenceStore
 
 #: A daily sweep plus six hours of slack. Tight enough to catch a single
 #: missed run, loose enough that a late one is not an incident.
 DEFAULT_WINDOW_HOURS = 30.0
+
+#: Surface a scheduled self-check's evidence is stored under. Its own rail —
+#: ``self`` — so it can never collide with a probe's surface id.
+SELF_CHECK_SURFACE = "self:sweep"
+
+_STORE_SOURCE = "self_check:store"
 
 
 class Liveness(str, Enum):
@@ -73,6 +81,25 @@ class SelfCheckResult:
         return 0 if self.liveness is Liveness.LIVE else 1
 
 
+@runtime_checkable
+class SelfEvidenceSink(Protocol):
+    """Where a completed sweep's self-evidence is recorded, and read back.
+
+    :class:`SelfEvidenceLog` and :class:`StoreSelfEvidenceLog` both satisfy
+    this, so :func:`self_check` and :func:`run_self_check` work identically
+    against either — a per-instance file, or a durable store — without
+    caring which one a caller is holding.
+    """
+
+    def record(self, *, sweep_size: int, blind: int, when: datetime | None = None) -> None: ...
+
+    def latest(self) -> datetime | None: ...
+
+    def describe(self) -> str:
+        """Where this sink lives, for a human reading a result's detail."""
+        ...
+
+
 @dataclass(frozen=True)
 class SelfEvidenceLog:
     """The append-only record of sweeps that actually finished."""
@@ -105,26 +132,72 @@ class SelfEvidenceLog:
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
         return None
 
+    def describe(self) -> str:
+        return str(self.path)
+
+
+@dataclass(frozen=True)
+class StoreSelfEvidenceLog:
+    """Durable self-evidence, written through the DM2.1 store rather than a
+    per-instance file.
+
+    :class:`SelfEvidenceLog` proves the liveness of *an instance* — Cloud
+    Run's filesystem is per-instance and ephemeral, so a fresh instance
+    cannot see what a prior one wrote. This writes through
+    :class:`~deadman.store.base.EvidenceStore` instead, so a fresh instance
+    reads exactly what a previous one recorded, and the claim survives a
+    cold start.
+    """
+
+    store: EvidenceStore
+    surface: str = SELF_CHECK_SURFACE
+
+    def record(self, *, sweep_size: int, blind: int, when: datetime | None = None) -> None:
+        """Append one row. Call this only after a sweep has completed."""
+        stamp = when or datetime.now(timezone.utc)
+        self.store.append(
+            Evidence(
+                surface=self.surface,
+                observation=Observation.HEALTHY,
+                method=Method.LOCAL_ARTIFACT,
+                summary=(
+                    f"scheduled self-check: sweep completed ({sweep_size} surfaces, {blind} blind)"
+                ),
+                source=_STORE_SOURCE,
+                read_at=stamp,
+                detail={"sweep_size": sweep_size, "blind": blind},
+            )
+        )
+
+    def latest(self) -> datetime | None:
+        """``read_at`` of the newest row, or ``None`` if there is none."""
+        row = self.store.latest(self.surface)
+        return None if row.is_blind else row.read_at
+
+    def describe(self) -> str:
+        return f"store:{self.surface}"
+
 
 def self_check(
-    log: SelfEvidenceLog,
+    log: SelfEvidenceSink,
     window_hours: float = DEFAULT_WINDOW_HOURS,
     now: datetime | None = None,
 ) -> SelfCheckResult:
     """Has a sweep completed recently enough, according to what it wrote."""
     moment = now or datetime.now(timezone.utc)
     last = log.latest()
+    location = log.describe()
 
     if last is None:
         return SelfCheckResult(
             liveness=Liveness.NO_EVIDENCE,
-            summary=f"no completed sweep has ever been recorded at {log.path}",
-            detail={"log_path": str(log.path), "window_hours": window_hours},
+            summary=f"no completed sweep has ever been recorded at {location}",
+            detail={"log_path": location, "window_hours": window_hours},
         )
 
     age_h = (moment - last).total_seconds() / 3600.0
     detail = {
-        "log_path": str(log.path),
+        "log_path": location,
         "last_sweep_at": last.isoformat(),
         "age_hours": round(age_h, 2),
         "window_hours": window_hours,
@@ -147,7 +220,7 @@ def self_check(
 
 
 def run_self_check(
-    log: SelfEvidenceLog,
+    log: SelfEvidenceSink,
     window_hours: float = DEFAULT_WINDOW_HOURS,
     channel: AlertChannel | None = None,
     now: datetime | None = None,

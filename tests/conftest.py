@@ -16,6 +16,7 @@ from collections.abc import Iterator
 import pytest
 
 from deadman.ingest.auth import SECRET_ENV
+from deadman.scheduled.auth import SECRET_ENV as SCHEDULER_SECRET_ENV
 
 #: The suite's shared ingest secret. :mod:`deadman.service` refuses to import
 #: without one (see ``tests/test_ingest_startup.py``, which proves that
@@ -25,6 +26,11 @@ from deadman.ingest.auth import SECRET_ENV
 #: batches with it.
 TEST_INGEST_SECRET = "test-only-ingest-secret-not-a-real-one"
 os.environ[SECRET_ENV] = TEST_INGEST_SECRET
+
+#: Same reasoning, for the scheduled self-check endpoint's shared secret (see
+#: ``tests/test_scheduled_startup.py``).
+TEST_SCHEDULER_SECRET = "test-only-scheduler-secret-not-a-real-one"
+os.environ[SCHEDULER_SECRET_ENV] = TEST_SCHEDULER_SECRET
 
 
 class NetworkBlockedError(RuntimeError):
