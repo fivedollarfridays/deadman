@@ -18,18 +18,17 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1 (packaging/hermetic tests/CI) implemented and locally verified, but
-**blocked on closing** — no GitHub remote exists for this repo, so the
-"CI is green" acceptance criterion cannot be satisfied. See **Blockers**.
+DM1.1 and DM1.2 are `done`. Wave-2 tasks (DM1.3, DM1.4, DM1.8, DM1.9) are
+unblocked and ready to start next.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, all `pending`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1 + DM1.2 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
-| DM1.1 | Packaging, hermetic test suite, CI | P0 | 25 | claude-sonnet-5 | — |
-| DM1.2 | Evidence model + probe contract tests | P0 | 20 | claude-sonnet-5 | DM1.1 |
+| DM1.1 | Packaging, hermetic test suite, CI ✓ | P0 | 25 | claude-sonnet-5 | — |
+| DM1.2 | Evidence model + probe contract tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.3 | Brief + disk probe tests | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.4 | Metricool probe + verification spike | P1 | 35 | claude-opus-5 | DM1.1 |
 | DM1.5 | Diagnosis layer on Gemini via ADK | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
@@ -52,6 +51,31 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.2 evidence model + probe contract tests (`/start-task DM1.2`)
+
+- The evidence model (`src/deadman/evidence/model.py`) and probe contract
+  (`src/deadman/probes/base.py`) were already implemented as part of DM1.1's
+  foundation work; this task locked their behavior down with tests rather
+  than writing new implementation.
+- `tests/test_evidence_model.py`: `Method` trust ordering (`DESTINATION_API`
+  outranks `REPORTED`), `Evidence.provenance_row()` returns
+  `(source, method, surface, iso_timestamp)`, `unobservable()` puts the
+  reason in `detail` and merges any extra detail kwargs alongside it.
+- `tests/test_probe_contract.py`: a raising probe yields `UNOBSERVABLE`
+  (never `FAULT`) via `run_probe`; a probe returning a non-`Evidence` value
+  is contained the same way; a well-behaved probe's evidence passes through
+  unchanged; `sweep()` isolates one raising probe from the rest instead of
+  taking the whole run down; `blind_spots()` returns only unobserved
+  evidence and excludes healthy/fault entries.
+- Verification: `pytest tests/` — 11/11 passing (up from 2 pre-existing
+  hermetic-suite canaries); `ruff check` clean on both new files; `bpsai-pair
+  arch check --strict` clean project-wide.
+- All 7 acceptance criteria checked off in `.paircoder/tasks/DM1.2.task.md`
+  with the test that satisfies each; `bpsai-pair task update DM1.2 --status
+  done` passed the strict AC gate on first real attempt (after checking the
+  boxes — the gate reads them from the task file, not from having tests
+  merely exist).
 
 ### Session: 2026-08-10 — DM1.1 packaging, hermetic suite, CI (`/start-task DM1.1`)
 
@@ -108,30 +132,15 @@ retiring the seven existing point-solution monitors.
 
 ## What's Next
 
-1. **Resolve the two blockers below** (both need a human decision).
-2. Then dispatch: `bpsai-pair engage plans/backlogs/DM1-deadman-v1.md`
-   — or start manually with `/start-task DM1.1`.
-3. First wave after DM1.1 is five parallel tasks with no file collisions.
+1. DM1.1 and DM1.2 are both `done`. Remaining wave-2 tasks (DM1.3, DM1.4,
+   DM1.8, DM1.9) are unblocked and can proceed.
 
 ## Blockers
 
-**0. DM1.1 cannot close: no GitHub remote for this repo.** Checked both this
-worktree and the underlying checkout at `/Users/kevinmasterson/Projects/deadman`
-— zero remotes configured, and no repo URL recorded in `.paircoder/config.yaml`
-or the docs. `gh` is authenticated as `fivedollarfridays`, but
-`fivedollarfridays/deadman` does not exist yet. DM1.1's AC "CI is green on the
-branch" and its verification command (`gh run list --branch
-engage/dm1-deadman-v1 --limit 1`) both need Actions running somewhere, which
-needs a remote to push to. Creating one is a one-way, shared-infrastructure
-action (new repo under the user's account, code pushed to it) that is outside
-this task's authority to decide unilaterally — asked which repo/org/visibility
-to use and got no reply before this session closed out, so DM1.1 was left with
-that AC unchecked (fail-closed, not a false green) and the task lands
-`blocked` rather than `done`. Everything else in DM1.1 is implemented and
-verified locally (see session entry above). **Needs a human decision:**
-create `fivedollarfridays/deadman` (or point at an existing repo) and push
-`engage/dm1-deadman-v1`, then re-run `bpsai-pair task update DM1.1 --status
-done` once Actions reports green.
+**0. RESOLVED — DM1.1's GitHub remote blocker.** `origin` now points at
+`https://github.com/fivedollarfridays/deadman.git` and `bpsai-pair task show
+DM1.1` reports `status: done`. The remote-creation decision this blocker was
+waiting on was made outside this session; no action needed here.
 
 **1. `plan feasibility` REFUSES DM1.1, DM1.2, DM1.5** (fail-closed gate).
 Reason: downstream token risk if a hub task fails — 422,500 tokens behind
