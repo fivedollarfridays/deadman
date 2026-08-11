@@ -102,6 +102,57 @@ the body does not. And an `ActionResult` says `performed`, never `success` —
 whether the surface recovered is a fact about the surface, which only a fresh
 observation establishes. That is the verification loop.
 
+## Correlating without a graph
+
+A lineage-graph monitor answers "what else does this affect?" by walking edges
+somebody declared. Nothing declares an edge between free bytes on a laptop
+volume, a phone relay and a third-party scheduler; the surfaces share no schema
+to build one from and nobody is going to write one. So `deadman.correlate`
+**infers** the relationship, which is the harder half of the problem, and says
+so on every incident it produces.
+
+Two stages, and the split is the whole design.
+
+| | Who decides | On what |
+|---|---|---|
+| **Which faults are worth one question** | `correlate.window` | `read_at` proximity. Deterministic, cheap, and establishes *nothing* |
+| **Whether they share a cause** | the model, via `diagnose` | the same grounded-citation contract as any other hypothesis |
+| **Which surfaces the incident covers** | `correlate.engine` | the citations — never the window |
+
+**Co-occurrence is candidacy, not evidence.** Every probe in a sweep runs
+within milliseconds of every other, so two faults share a `read_at` whether or
+not they share a cause — and `read_at` is when *we looked*, not when the fault
+began. Timing agreement earns the right to ask the question. Nothing more, and
+in particular no confidence: the number on an incident is the diagnosis's own
+capped number, carried through unchanged.
+
+**Membership is read off the citations.** A model handed three broken things
+will narrate a single story about them, and the story is free. So a
+relationship requires quoted evidence from **two or more faulting surfaces**;
+a surface that merely broke at the same time is not a member.
+
+**Blindness is never a leg**, at either stage. An `UNOBSERVABLE` row beside a
+lone fault is not a candidate, and a hypothesis that ties a fault to a blind
+surface is not a correlation — `grounded-blind-relay-tie` is exactly that case,
+fully grounded and still refused. A surface we could not see cannot corroborate
+anything; inferring from it is inferring from an absence of evidence.
+
+**What the incident does not explain is a section, not a footnote.** Faults and
+blind spots in the window that the shared cause did not account for are listed
+by name. They are deliberately *not* folded into a discount on the confidence:
+turning "we could not see the relay" into a slightly smaller number tells a
+reader we were less sure and never tells them of what.
+
+Three statuses, for the same reason `Observation` and `DiagnosisStatus` have
+three. `UNCORRELATED` ("we got an answer and it tied nothing") and
+`UNAVAILABLE` ("we could not get an answer") never collapse — an operator told
+"uncorrelated" concludes we checked.
+
+`Basis.INFERRED` rides on every incident and is rendered in words, naming the
+surfaces no edge was found between and stating what inference costs: it can be
+wrong in ways a declared dependency edge cannot. `Basis.TRAVERSED` exists in
+the enum and nothing in this repo can produce one; a test pins that.
+
 ## Deployment
 
 Brain in **Cloud Run**. Collectors on each host push evidence outward. Actions

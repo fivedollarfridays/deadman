@@ -38,6 +38,27 @@ sentence, so no retry is chosen. If that recording is ever replaced by a live
 capture, keep a version whose prose recommends the wrong action; it is the only
 test that proves model text cannot steer the executor.
 
+## `bundle-disk-cascade` and the correlation recordings
+
+The disk-fills-then-everything-dies case: one host, three surfaces, no lineage
+graph between any of them. DM1.10 replays three responses against it, and the
+argument is what *fails* to correlate rather than what succeeds.
+
+- `grounded-disk-cascade` — the real thing. Cites the disk and the scheduler,
+  ties them, and is capped from 0.7 to 0.4 because the tie runs through a
+  `REPORTED` row.
+- `grounded-disk-only` — the near miss. A perfectly good diagnosis over the
+  same three co-occurring rows, which happens to be a diagnosis *about the
+  disk*. Three broken things in one window and no relationship, which is the
+  test that stops this task from being a time-bucket.
+- `grounded-blind-relay-tie` — added for DM1.10 and the sharpest of the three.
+  Fully grounded: it quotes the disk trend and it quotes the relay's own
+  "cannot observe". Two surfaces, two citations, one tidy story — and no
+  correlation, because a relay we could not reach cannot corroborate anything.
+  If it is ever replaced by a live capture, keep a version that ties a fault to
+  an `UNOBSERVABLE` row; it is the only test that proves blindness cannot
+  become a leg.
+
 `test_diagnose.py::test_recorded_evidence_ids_match_the_derived_scheme` asserts
 the ids inside these responses still match what
 `deadman.diagnose.schema.evidence_id` derives. If the id scheme ever changes,
