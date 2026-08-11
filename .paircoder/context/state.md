@@ -18,18 +18,18 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1 and DM1.2 are `done`. Wave-2 tasks (DM1.3, DM1.4, DM1.8, DM1.9) are
-unblocked and ready to start next.
+DM1.1, DM1.2, and DM1.3 are `done`. Remaining wave-2 tasks (DM1.4, DM1.8,
+DM1.9) are unblocked and ready to start next.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1 + DM1.2 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1 + DM1.2 + DM1.3 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM1.1 | Packaging, hermetic test suite, CI ✓ | P0 | 25 | claude-sonnet-5 | — |
 | DM1.2 | Evidence model + probe contract tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
-| DM1.3 | Brief + disk probe tests | P0 | 20 | claude-sonnet-5 | DM1.1 |
+| DM1.3 | Brief + disk probe tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.4 | Metricool probe + verification spike | P1 | 35 | claude-opus-5 | DM1.1 |
 | DM1.5 | Diagnosis layer on Gemini via ADK | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
@@ -51,6 +51,35 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.3 brief + disk probe tests (`/start-task DM1.3`)
+
+- `tests/test_morning_brief_probe.py`: missing log inside an existing
+  directory yields `FAULT`; a missing *parent* directory yields
+  `UNOBSERVABLE` (config problem, not the brief's fault); a file with a
+  fresh mtime but a stale timestamp inside its last row still yields
+  `FAULT` (explicitly asserts the mtime *is* fresh, to prove the probe
+  isn't using it); a torn final JSONL row falls back to the newest
+  parseable row before it (asserted via the fallback row's timestamp and
+  `row_count == 2`, not just "didn't error"); a future-dated timestamp
+  yields `UNOBSERVABLE` (clock skew, not a verdict).
+- `tests/test_disk_probe.py`: mocks `shutil.disk_usage` and pre-seeds
+  `DiskProbe`'s history JSONL to control the trend independently of the
+  live volume. A perfectly linear -20GB/day slope with 50GB currently free
+  (well above a 10GB floor) still yields `FAULT` because the 2-day runway
+  is inside the 14-day window — the "healthy level, bad trend" case this
+  probe exists for. A single sample yields `HEALTHY` with
+  `detail["trend"] == "insufficient history"` and no `slope_gb_per_day`
+  key. A 5-point series with one mid-series outlier (40GB dip amid
+  ~80GB) keeps a non-negative least-squares slope and stays `HEALTHY` —
+  proving the outlier doesn't flip the projection.
+- Verification: `pytest tests/` — 19/19 passing (up from 11); `ruff check .`
+  clean repo-wide. Built a scratch `python3.11` venv (`pyproject.toml`
+  requires 3.11+; the ambient `python3` was 3.14) since none existed in the
+  worktree yet.
+- All 9 acceptance criteria checked off in `.paircoder/tasks/DM1.3.task.md`
+  with the specific test (or command) that satisfies each; `bpsai-pair task
+  update DM1.3 --status done` passed the strict AC gate on first attempt.
 
 ### Session: 2026-08-11 — DM1.2 evidence model + probe contract tests (`/start-task DM1.2`)
 
