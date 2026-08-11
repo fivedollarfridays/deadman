@@ -23,6 +23,7 @@ from deadman.evidence.model import Evidence, Observation
 from deadman.probes.base import Probe, blind_spots, sweep
 from deadman.probes.disk import DiskProbe
 from deadman.probes.morning_brief import MorningBriefProbe
+from deadman.self_check import SelfEvidenceLog
 
 ProbesFn = Callable[[], list[Probe]]
 
@@ -51,13 +52,22 @@ def _evidence_row(evidence: Evidence) -> dict[str, object]:
     }
 
 
-def build_board(probes: list[Probe]) -> dict[str, object]:
+def build_board(probes: list[Probe], self_log: SelfEvidenceLog | None = None) -> dict[str, object]:
     """The current board: every probe's evidence plus the counts a human
     reads first. Blind spots get their own field per ``base.blind_spots`` —
     a summary that folds them into "healthy" is the lie this project is
-    about."""
+    about.
+
+    When ``self_log`` is given, a row is appended *after* the sweep completes.
+    That row is the only evidence deadman has that it is alive (see
+    ``deadman.self_check``), and it is written here rather than at startup on
+    purpose: what needs proving is that a sweep finished, not that a process
+    began.
+    """
     evidence = sweep(probes)
     blind = blind_spots(evidence)
+    if self_log is not None:
+        self_log.record(sweep_size=len(evidence), blind=len(blind))
     return {
         "surfaces": [_evidence_row(e) for e in evidence],
         "blind_spots": [e.surface for e in blind],
@@ -67,10 +77,17 @@ def build_board(probes: list[Probe]) -> dict[str, object]:
     }
 
 
-def make_app(probes_fn: ProbesFn) -> Callable[[dict, Callable], Iterable[bytes]]:
+def make_app(
+    probes_fn: ProbesFn, self_log: SelfEvidenceLog | None = None
+) -> Callable[[dict, Callable], Iterable[bytes]]:
     """Build a WSGI app reading probes from ``probes_fn`` on every request,
     so the board reflects the current state rather than one taken at
-    startup."""
+    startup.
+
+    ``self_log`` is written only on a served board, never on a rejected
+    request. A 405 is not a sweep, and recording it would let a stream of bad
+    requests forge liveness for a service whose probes never ran.
+    """
 
     def app(environ: dict, start_response: Callable) -> Iterable[bytes]:
         if environ.get("REQUEST_METHOD") != "GET":
@@ -81,7 +98,7 @@ def make_app(probes_fn: ProbesFn) -> Callable[[dict, Callable], Iterable[bytes]]
             )
             return [body]
 
-        board = build_board(probes_fn())
+        board = build_board(probes_fn(), self_log=self_log)
         body = json.dumps(board).encode("utf-8")
         start_response(
             "200 OK",
@@ -92,7 +109,21 @@ def make_app(probes_fn: ProbesFn) -> Callable[[dict, Callable], Iterable[bytes]]
     return app
 
 
-app = make_app(default_probes)
+def default_self_log() -> SelfEvidenceLog:
+    """Where the deployed service records that a sweep finished.
+
+    Cloud Run's filesystem is per-instance and ephemeral, so this proves the
+    liveness of *an instance*, not of the service across cold starts. That is
+    a real limitation and it is stated here rather than left to be discovered:
+    a durable self-evidence store is what makes this claim survive scale-to-
+    zero, and it is v2.
+    """
+    return SelfEvidenceLog(
+        path=Path(os.environ.get("DEADMAN_SELF_LOG", "/tmp/deadman/self-evidence.jsonl"))
+    )
+
+
+app = make_app(default_probes, self_log=default_self_log())
 
 
 def main() -> None:
