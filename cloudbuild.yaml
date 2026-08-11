@@ -1,0 +1,33 @@
+# Builds and deploys deadman without a local Docker daemon: `docker build`
+# and `docker push` below run on Cloud Build's own workers, not this
+# machine's. Submit with:
+#   gcloud builds submit --config cloudbuild.yaml .
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE}', '.']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE}']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - '${_SERVICE}'
+      - --image=${_IMAGE}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --quiet
+
+images:
+  - '${_IMAGE}'
+
+substitutions:
+  _SERVICE: deadman
+  _REGION: us-central1
+  _IMAGE: gcr.io/${PROJECT_ID}/deadman:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
