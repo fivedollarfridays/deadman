@@ -25,6 +25,12 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
+      # `--update-env-vars`, never `--set-env-vars`. The latter REPLACES the
+      # whole environment, which would wipe DEADMAN_INGEST_SECRET on every
+      # deploy — and the service refuses to start without it, so the outage
+      # would be immediate and the cause would look like a code change.
+      # The secret itself is never set from here; see infra/README.md.
+      - --update-env-vars=DEADMAN_STORE_BACKEND=firestore
       - --quiet
 
 images:

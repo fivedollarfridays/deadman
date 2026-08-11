@@ -177,9 +177,55 @@ surfaces no edge was found between and stating what inference costs: it can be
 wrong in ways a declared dependency edge cannot. `Basis.TRAVERSED` exists in
 the enum and nothing in this repo can produce one; a test pins that.
 
+## What crossing a wire does to a claim
+
+The surfaces are not where the service is. Cloud Run cannot read a log on a
+Mac, so a collector runs where the surfaces live and posts signed batches to
+`POST /evidence` (`src/deadman/ingest/`). That topology has a consequence the
+HTTP hides: **every observation the hosted service holds is a report of an
+observation, not an observation.**
+
+So arrival caps the method of every incoming row at `REPORTED`, the weakest
+tier on the ladder. The collector's claimed method is preserved in
+`detail.reported_method` rather than erased — downgraded, not discarded — but
+nothing automated may read a relayed claim as more than a claim. Recording a
+collector's file read as the service's own would have the service assert it
+inspected a disk it has no access to: a heartbeat wearing a hat, which is the
+exact construction `Method.REPORTED` was named to catch.
+
+**What that costs is the point, not a bug to route around.** Every action
+floor in `remediate/registry.py` sits above the 0.4 confidence ceiling
+`diagnose/grounding.py` imposes on a `REPORTED` citation, so a diagnosis
+resting only on collected evidence escalates to a human instead of moving
+infrastructure. An agent that restarts a service on an unverified relayed
+assertion is how automated remediation turns an outage into two.
+
+Three more facts about a stored remote row, each a field rather than a
+convention:
+
+- `read_at` stays the collector's reading time and `detail.received_at` is
+  ours. Collapsing them would date a spool delivered after an outage as a
+  burst of readings taken *during* it.
+- `detail.collector_id` names who said it — which DM2.4 needs, because on a
+  wire an empty inbox and a healthy estate look identical, and telling them
+  apart requires knowing who was expected to speak.
+- `detail.wire_row_id` is the identity of the observation, computed before
+  arrival is annotated. A collector that could not deliver re-sends, and it
+  must be able to; deduplicating on the *stored* row would fail, because the
+  stored row carries an arrival time that differs on the second delivery.
+  Idempotency keyed on our own bookkeeping is not idempotency.
+
+Auth fails closed at startup: no `DEADMAN_INGEST_SECRET`, no service. The
+alternative failure is quiet — an endpoint accepting unsigned batches produces
+a board that looks like a monitored estate and is a guestbook.
+
 ## Deployment
 
 Brain in **Cloud Run**. Collectors on each host push evidence outward. Actions
 dispatched back. A monitor must not share fate with what it monitors.
 
-Built with **Cloud Build**, so no local Docker daemon is required.
+Built with **Cloud Build**, so no local Docker daemon is required. The image
+installs `.[firestore]`, because ingested evidence goes to a store that
+outlives the instance — a memory-backed deploy would forget the estate on
+every scale-to-zero, and forgetting is indistinguishable from never having
+been told.

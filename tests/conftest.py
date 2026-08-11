@@ -9,10 +9,22 @@ marker, applied per test, never per file or globally.
 
 from __future__ import annotations
 
+import os
 import socket
 from collections.abc import Iterator
 
 import pytest
+
+from deadman.ingest.auth import SECRET_ENV
+
+#: The suite's shared ingest secret. :mod:`deadman.service` refuses to import
+#: without one (see ``tests/test_ingest_startup.py``, which proves that
+#: refusal in a subprocess with this variable stripped), so the suite must
+#: supply a value. Set unconditionally rather than with ``setdefault``: a
+#: developer with the real secret exported should not have their tests sign
+#: batches with it.
+TEST_INGEST_SECRET = "test-only-ingest-secret-not-a-real-one"
+os.environ[SECRET_ENV] = TEST_INGEST_SECRET
 
 
 class NetworkBlockedError(RuntimeError):

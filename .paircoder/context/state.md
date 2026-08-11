@@ -64,12 +64,12 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 1 `done`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 2 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
-| DM2.2 | Authenticated ingest, and what a reported observation means | P0 | 35 | claude-opus-5 | DM2.1 |
+| DM2.2 | Authenticated ingest, and what a reported observation means ✓ | P0 | 35 | claude-opus-5 | DM2.1 |
 | DM2.7 | An alarm that actually reaches Kevin | P0 | 30 | claude-sonnet-5 | DM2.1 |
 | DM2.3 | The collector: sweep where the surfaces actually are | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health | P0 | 30 | claude-opus-5 | DM2.2 |
@@ -124,6 +124,81 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.2 done: authenticated ingest, and the arrival rule
+
+`src/deadman/ingest/` now holds `POST /evidence`, wired into `service.py`. 77
+new tests, 342 passing, all four gates clean.
+
+**The rule that made this task worth doing: arrival caps every method at
+`REPORTED`.** The service did not read the disk; a collector says it did.
+Recording that as `LOCAL_ARTIFACT` would have Cloud Run assert it inspected a
+disk it has no access to. The cap is a table (`ON_ARRIVAL`), total over
+`Method` by test, so a method added later must be graded deliberately rather
+than by a silent `dict.get` default.
+
+**What that costs is the point, and it is written down rather than routed
+around.** Every action floor in `remediate/registry.py` sits above the 0.4
+confidence ceiling `diagnose/grounding.py` puts on a `REPORTED` citation, so a
+diagnosis resting only on collected evidence escalates to a human instead of
+moving infrastructure. Since every real DM2 surface is remote, that disables
+automated remediation on collected evidence — which is the correct reading of
+what the service actually knows. The collector's claim survives in
+`detail.reported_method`: downgraded, not erased.
+
+**Idempotency forced a distinction the store could not have made.** DM2.1's
+`row_id` hashes the encoded row, and an arriving row must carry
+`detail.received_at` — our clock, distinct from the collector's `read_at`. So a
+re-sent batch hashes *differently* as a stored row and the store's own dedupe
+would not have caught it. Identity therefore belongs to the observation, not to
+our bookkeeping about it: `detail.wire_row_id` is computed before annotation
+and is what ingest compares. A test pins that keying on the stored row instead
+fails. One honest limit, named in the module: the replay lookback is 200 rows
+per surface, and a replay older than that stores a recognisable second copy
+(same `wire_row_id`, same `read_at`, later `received_at`) rather than a silent
+doubling of the trend.
+
+**Auth verifies the raw bytes before parsing anything**, so nothing
+unauthenticated is ever interpreted, and `signed_at` lives *inside* the signed
+payload — a timestamp in a header sits outside the MAC and the freshness check
+it feeds would be decorative. The window is bounded in both directions;
+one-sided lets a captured body be replayed forever by dating it forward. Note
+what freshness is not: it is not the replay defence for an honest collector
+retrying a spool it could not deliver. Refusing those would drop evidence
+exactly when the network is already unreliable.
+
+**`service.py` refuses to import without `DEADMAN_INGEST_SECRET`**, proven in a
+real subprocess with the variable stripped (DM1.11's discipline: "refuses to
+start" is a claim about a process). `tests/conftest.py` therefore sets a
+throwaway secret for the suite.
+
+**Ten mutations, ten named tests**, `PYTHONDONTWRITEBYTECODE=1` throughout —
+identity arrival mapping, endpoint storing without downgrading, signature check
+removed, freshness removed, dedupe keyed on the stored row, dedupe keyed on
+surface alone, body cap removed, missing secret defaulting to empty, unknown
+wire method coerced to the weakest tier, one-sided freshness window. Each broke
+a specific test. The endpoint suite passed 21/21 on its first run, which is
+precisely when this repo's own doctrine says to be suspicious.
+
+**Two things found by writing the docs rather than the code.** The `curl`
+runbook in `infra/README.md` was executed, not asserted (DM1.8's lesson): the
+exact body is verified to make `openssl dgst -hmac` and `auth.sign` agree, and
+to store with `method='reported'`. And the first draft of the
+"no secret is committed" test failed on its own documentation — a `git grep`
+for the variable name cannot distinguish a pasted token from a runbook telling
+an operator how to set one, so the rule now tests the *value*.
+
+**Deploy path closed, per DM2.1's handoff.** `Dockerfile` installs
+`.[firestore]` and `cloudbuild.yaml` sets `DEADMAN_STORE_BACKEND=firestore`
+with `--update-env-vars`, never `--set-env-vars`, which would replace the whole
+environment and wipe the ingest secret on every deploy. The memory backend
+stays the local default but now announces itself on stderr: a deploy that
+missed the variable would otherwise answer a collector `stored: 1` for evidence
+that dies at the next scale-to-zero, which is a false green nobody would find
+by looking at the board. **The deploy itself is unrun here** — no gcloud in
+this session, and it is DM2.6's privileged step. Firestore prerequisites
+(database creation, `roles/datastore.user`) are documented in
+`infra/README.md`.
 
 ### Session: 2026-08-11 — DM2.1 done: the evidence store seam
 
@@ -826,18 +901,40 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2).** DM2.1 is done, which unblocks wave 2: **DM2.2** (authenticated
-ingest) and **DM2.7** (an alarm that reaches Kevin) can run in parallel. Both
-consume `deadman.store`:
+**Now (DM2).** DM2.1 and DM2.2 are done. **DM2.7** (an alarm that reaches
+Kevin) is the remaining wave-2 task and is unblocked; DM2.2 done also unblocks
+**DM2.3** (the collector) and **DM2.4** (collector liveness).
 
-- DM2.2 stores rows through `EvidenceStore.append`; idempotent replay is
-  already guaranteed by content-addressed `row_id`, so its "replayed batch
-  changes nothing" AC needs a test, not a mechanism. Its `collector_id` and
-  arrival-time fields go in `Evidence.detail` — `encode`/`decode` round-trip
-  `detail` verbatim.
-- DM2.7 records transport failures through the same store.
-- Whichever of DM2.2/DM2.6 first constructs a `FirestoreEvidenceStore` in the
-  deployed service must change the Dockerfile from `.` to `.[firestore]`.
+What the next three tasks inherit from DM2.2:
+
+- **DM2.3** signs with `deadman.ingest.wire.dumps` + `auth.sign` and posts to
+  `POST /evidence` with the `X-Deadman-Signature` header. The wire format is
+  the store's document format plus `version`/`collector_id`/`signed_at`; the
+  collector must send the **exact bytes** `dumps` returned, since the MAC
+  covers bytes. `signed_at` must be within `FRESHNESS_SECONDS` (300) of the
+  service's clock, so a spool held through an outage must be **re-signed**
+  before re-delivery — the batch's rows keep their original `read_at`, which
+  is the whole point of the two timestamps being separate. Retrying is safe
+  and expected: replay is idempotent.
+- **DM2.4** reads `detail.collector_id` and `detail.received_at` off stored
+  rows. `received_at` is the field that makes "this collector has gone quiet"
+  answerable; `read_at` cannot, because it is the collector's own clock on an
+  observation that may have been spooled. Note every ingested row is
+  `Method.REPORTED` regardless of what the collector claimed — check
+  `detail.reported_method` if the collector's own grade matters.
+- **DM2.7** records transport failures through the same store.
+- **Correction to the note left under DM2.1:** idempotent replay was *not*
+  free from content-addressed `row_id`. An arriving row must carry an arrival
+  time, which changes the hash on every delivery, so the store's dedupe would
+  not have fired. Ingest dedupes on `detail.wire_row_id` instead — the row's
+  identity computed *before* annotation.
+- **Done, was DM2.1's handoff:** the Dockerfile installs `.[firestore]` and
+  `cloudbuild.yaml` sets `DEADMAN_STORE_BACKEND=firestore`. **DM2.6 must
+  verify on the first real deploy** that the Firestore database exists and the
+  Cloud Run service account holds `roles/datastore.user`, and that
+  `DEADMAN_INGEST_SECRET` is set on the service — all three are startup
+  failures by design, so the deploy will fail loudly rather than serve wrong.
+  See `infra/README.md`.
 
 Items below are DM1-era and carried forward.
 

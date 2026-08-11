@@ -146,15 +146,114 @@ effectively empty and reports something close to 100% free on every cold
 start. That number is true and useless: the volume this probe was written
 about is a workstation's, and no container can see it. The hosted board is a
 demonstration surface. Trending a real host means running the probe on that
-host and shipping its evidence here, which is v2.
+host and shipping its evidence here — which is what `POST /evidence` below is
+for.
 
 ## Configuration
 
 | Env var | Default | Purpose |
 |---|---|---|
 | `PORT` | `8080` | Set by Cloud Run automatically; the service reads it. |
+| `DEADMAN_INGEST_SECRET` | **none — the service refuses to start** | Shared secret a collector signs its batches with. See "Ingest" below. |
+| `DEADMAN_STORE_BACKEND` | `memory` | `firestore` or `memory`. `cloudbuild.yaml` sets `firestore` on deploy; the `memory` default is for local runs only, and on Cloud Run it would forget the estate on every scale-to-zero. |
+| `DEADMAN_FIRESTORE_PROJECT` | the SDK's default | GCP project holding the Firestore database. |
 | `DEADMAN_BRIEF_LOG` | `/var/log/deadman/morning-brief.jsonl` | Path the morning-brief probe reads. |
 | `DEADMAN_DISK_HISTORY` | `/tmp/deadman/disk-history.jsonl` | Where the disk probe appends its trend samples. Cloud Run's filesystem is ephemeral per instance, so the trend resets on every cold start — acceptable for the demo board; a persistent volume is out of scope for this task. |
+
+## Ingest: `POST /evidence`
+
+The board's own probes can only see the container they run in. Every surface
+that matters lives somewhere else, so a collector runs where the surfaces are
+and ships signed batches here. `src/deadman/ingest/` is the receiving end.
+
+### The secret is a prerequisite, not an option
+
+**The service will not import without `DEADMAN_INGEST_SECRET`.** That is
+deliberate: an unconfigured deploy that started anyway would serve an endpoint
+accepting evidence from anyone who can reach the URL, and the board would then
+show a monitored estate that was in fact whatever the last caller said it was.
+A container that will not boot is loud; a guestbook pretending to be a monitor
+is not.
+
+Generate one and set it out of band — never in `cloudbuild.yaml`, which is
+committed:
+
+```bash
+SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+
+gcloud run services update deadman --region=us-central1 \
+  --update-env-vars="DEADMAN_INGEST_SECRET=$SECRET"
+```
+
+For anything beyond a demo, hold it in Secret Manager and mount it instead, so
+the value is not readable from the service description:
+
+```bash
+printf %s "$SECRET" | gcloud secrets create deadman-ingest-secret --data-file=-
+gcloud run services update deadman --region=us-central1 \
+  --update-secrets="DEADMAN_INGEST_SECRET=deadman-ingest-secret:latest"
+```
+
+Keep the same value on the collector side; it is what
+`deadman.ingest.auth.sign` uses, and a mismatch is a `401` on every batch.
+
+The deploy step in `cloudbuild.yaml` uses `--update-env-vars`, not
+`--set-env-vars`, so redeploying preserves whichever of these you used.
+`--set-env-vars` replaces the entire environment and would take the service
+down on the next build.
+
+### Firestore has to exist first
+
+`cloudbuild.yaml` sets `DEADMAN_STORE_BACKEND=firestore`, and the Firestore
+backend raises at construction rather than degrading, so the database must
+exist in the project before the first deploy that carries this setting:
+
+```bash
+gcloud services enable firestore.googleapis.com
+gcloud firestore databases create --location=nam5
+```
+
+The Cloud Run service account also needs `roles/datastore.user`. As with the
+invoker binding above, a missing role here produces a startup failure whose
+message names permissions rather than configuration.
+
+### What arrives is not what was observed
+
+A collector reads a log on a Mac. What this service then holds is a *report
+of* that read, not the read — so ingest caps the method of every arriving row
+at `reported`, the weakest tier on `Method`'s trust ladder, and preserves the
+collector's claim in `detail.reported_method`. See
+`src/deadman/ingest/arrival.py` for why, including what it costs: a diagnosis
+resting only on collected evidence escalates to a human instead of moving
+infrastructure, because every action floor in the remediation registry sits
+above the confidence ceiling a `reported` citation earns.
+
+Each stored row also carries `detail.collector_id`, `detail.received_at` (this
+service's clock at delivery, distinct from the collector's `read_at`), and
+`detail.wire_row_id` (the observation's identity, which is what makes a
+re-sent batch idempotent).
+
+### Posting a batch by hand
+
+Verified end to end against `deadman.ingest.endpoint` — `openssl`'s HMAC and
+`deadman.ingest.auth.sign` agree on this exact body:
+
+```bash
+URL="$(gcloud run services describe deadman --region=us-central1 --format='value(status.url)')"
+BODY='{"collector_id":"laptop","rows":[{"detail":{},"method":"local_artifact","observation":"healthy","read_at":"2026-08-11T07:00:00+00:00","source":"by hand","summary":"a hand-rolled row","surface":"demo:manual"}],"signed_at":"2026-08-11T07:00:00+00:00","version":1}'
+SIG="$(printf %s "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $NF}')"
+
+curl -X POST "$URL/evidence" -H "X-Deadman-Signature: $SIG" -d "$BODY"
+```
+
+`signed_at` must be within five minutes of the service's clock or the batch is
+refused as stale, so edit both timestamps before running this. The signature
+covers the **exact bytes**, so any edit to `BODY` after computing `SIG`
+invalidates it — which is the point.
+
+Expected replies: `200` with `{"stored": n, "duplicates": m}`; `401` for a
+missing, wrong or stale signature; `400` for a body that is not a valid batch;
+`413` for a body over 256 KiB. Nothing is stored on any of the failures.
 
 ## Local verification without GCP
 
