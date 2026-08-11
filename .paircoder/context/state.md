@@ -5,12 +5,15 @@
 <!-- paircoder:state:begin -->
 ## Active Plan
 
-**Plan:** `plan-2026-08-dm1-deadman-v1` — DM1: deadman v1 (contest-ready)
-**Status:** Planned, not started
-**Current Sprint:** DM1
-**Backlog:** `plans/backlogs/DM1-deadman-v1.md`
-**Brief:** `docs/SPRINT-BRIEF-DM1.md`
-**Branch:** `engage/dm1-deadman-v1`
+**Plan:** `plan-2026-08-dm2-make-it-real` — DM2: make it real
+**Status:** Planned, not started — 9 task files materialized
+**Current Sprint:** DM2
+**Backlog:** `plans/backlogs/DM2-make-it-real.md`
+**Brief:** `docs/SPRINT-BRIEF-DM2.md`
+**Branch:** `engage/dm2-make-it-real`
+
+**Previous sprint:** `plan-2026-08-dm1-deadman-v1` — DM1, 12 of 12 `done`,
+merged. Live at https://deadman-mrapac5nda-uc.a.run.app.
 
 Silent-failure detection and remediation for heterogeneous infrastructure.
 Submission target: All Things Agentic, Taskmaster category, **deadline
@@ -18,16 +21,36 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-**All twelve tasks are `done`. The DM1 sprint is complete.** The submission
-is assembled: live service, live Gemini path, rehearsed demo, generated
-samples, architecture diagram and README.
+**DM1 built a monitor that has never monitored anything.** It is a library, a
+test suite, and an endpoint that sweeps when a human sends it a GET. Nothing
+runs on a cadence, nothing survives a cold start, and zero surfaces watch real
+infrastructure. DM2 makes it real.
 
-Remaining before the **2026-08-31 5:00pm PDT** deadline is submission work
-rather than build work: record the demo take, write the Devpost entry, and
-flip the repository public.
+**The finding that justifies the sprint.** Pointing the existing
+`MorningBriefProbe` at `~/ops/data/brief-send-log.jsonl` with no new code
+returned FAULT immediately: no brief sent since 2026-08-04 06:56. Seven days,
+undetected, because the brief is itself the alerting channel and a dead brief
+cannot report its own death. That is the doctrine's canonical failure, live, in
+the estate this was built for.
+
+**The central architectural fact.** The surfaces are not where the service is.
+Cloud Run cannot read a log on the Mac, and opening inbound access to a laptop
+is the wrong answer. So DM2 splits into a **collector** that runs where the
+surfaces live and ships evidence to an authenticated ingest endpoint, and the
+hosted **service** that stores, correlates and alerts. This is a topology
+change, not a config change, and it drives the dependency graph.
+
+**Two commitments that constrain every task.** `pyproject.toml` declares
+`dependencies = []` — every new backend follows the `GeminiClient` seam
+(optional extra plus SDK imported inside the constructor). And evidence
+crossing a wire changes its provenance: the service receives a *report of* a
+local reading, and silently upgrading the method on arrival reintroduces the
+heartbeat this project exists to argue against.
+
+### Carried forward from DM1
 
 **The service is live and public** at https://deadman-mrapac5nda-uc.a.run.app
-(project `deadman-20260810`). `GET /` returns the board.
+(project `deadman-20260810`). `GET /` returns the board. DM2.6 redeploys it.
 
 **Contest eligibility is no longer at risk.** The live Gemini call has now
 happened: `gemini-3.5-flash` through the ADK, returning a structured
@@ -41,7 +64,35 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, all 12 `done`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 1 `done`
+
+| ID | Title | Pri | Cx | Model | Depends on |
+|---|---|---|---|---|---|
+| DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
+| DM2.2 | Authenticated ingest, and what a reported observation means | P0 | 35 | claude-opus-5 | DM2.1 |
+| DM2.7 | An alarm that actually reaches Kevin | P0 | 30 | claude-sonnet-5 | DM2.1 |
+| DM2.3 | The collector: sweep where the surfaces actually are | P0 | 35 | claude-sonnet-5 | DM2.2 |
+| DM2.4 | Collector liveness: absence must not read as health | P0 | 30 | claude-opus-5 | DM2.2 |
+| DM2.5 | Real surfaces, starting with the one already broken | P0 | 30 | claude-sonnet-5 | DM2.3 |
+| DM2.6 | Scheduled sweeps and scheduled self-check | P0 | 25 | claude-sonnet-5 | DM2.4 |
+| DM2.8 | The board grows a memory | P1 | 25 | claude-sonnet-5 | DM2.6 |
+| DM2.9 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | all |
+
+**Waves:** `DM2.1` → `DM2.2 DM2.7` → `DM2.3 DM2.4` → `DM2.5 DM2.6` →
+`DM2.8` → `DM2.9`
+
+**File collisions:** none inside a wave. DM2.6 and DM2.8 both edit
+`service.py`, resolved by making DM2.8 depend on DM2.6 — costs one wave,
+removes the conflict.
+
+**Cut list, in order:** DM2.8, then DM2.5's disk surfaces leaving only the
+morning brief. **Nothing else is cuttable.** Cutting DM2.4 would ship a
+monitor whose silence is ambiguous, which is worse than shipping nothing.
+
+**Privileged:** DM2.6 touches live billable cloud infrastructure
+(`deadman-20260810`). DM2.7 sends one real email over the ops rail.
+
+### Previous Sprint (DM1) — 12 tasks, 345 Cx, all 12 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -65,10 +116,88 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ### Backlog
 
-Out of scope for DM1 (v2): general surface registry, multi-brand support,
-retiring the seven existing point-solution monitors.
+Out of scope for DM2 (DM3 or later): grounding reliability and the 1-in-4
+ungrounded rate measured across 50+ live calls; the live correlation demo;
+Metricool and the phone relay as real surfaces (both need credentials and a
+destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
+— deadman's job is to notice it, and it already does; retiring the seven
+existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.1 done: the evidence store seam
+
+`src/deadman/store/` now holds the `EvidenceStore` Protocol and two backends
+behind it. 29 new tests, 265 passing, all four gates clean.
+
+**The Protocol is `append` / `latest` / `latest_per_surface` / `history`.**
+`history` is there for DM2.8 rather than for DM2.1, deliberately: this seam
+feeds four downstream tasks, and discovering in DM2.8 that held-duration needs
+a read the Protocol does not have would mean reopening the contract after
+three consumers depend on it. It is contract-tested now, so it is not
+speculative surface.
+
+**Absence stayed a state.** `latest()` on a surface with nothing stored
+returns `unobservable(...)` — never `None`, never a synthesised healthy row.
+Returning `None` would have pushed the judgement onto every caller, and one
+caller writing `if not evidence` would reinstate the false green the whole
+project argues against.
+
+**Replay safety fell out of content-addressed row identity.** `row_id()`
+hashes the encoded row, so an identical observation appended twice stores
+once, and a document backend writes with `set` instead of racing a
+read-modify-write. DM2.2's idempotent-batch AC gets this for free. Rows
+differing only in `read_at` are kept apart on purpose — collapsing those
+would erase the history DM2.8 computes held-duration from.
+
+**The Firestore backend is contract-tested, not merely written.** The suite is
+hermetic and the SDK is never installed, which would normally leave the
+deployed backend as the one nobody tests. Instead the backend takes an
+injected client and `tests/firestore_double.py` reproduces the narrow API
+slice it calls — including two behaviours that would otherwise surface only in
+production: Firestore document ids may not contain `/` (the surface
+`host:mac/disk` does, and the double caught the missing percent-encoding), and
+a collection query skips documents that exist only as subcollection parents.
+
+**Six mutations, six named tests.** Unencoded surface key, ascending Firestore
+ordering, memory ordered by arrival rather than `read_at`, absence synthesised
+as healthy, row identity by surface alone, dedup removed — each fails a
+specific test. A seventh check confirmed the AST seam guard fires on an
+injected module-scope `from google.cloud import firestore`, which is the half
+of the zero-dependency promise that must hold on a machine where the SDK *is*
+installed.
+
+**One thing left for whoever wires Firestore into the service:** the Dockerfile
+still installs `.` with no extras. Correct today — nothing constructs a
+`FirestoreEvidenceStore` — but DM2.2 or DM2.6 must change it to `.[firestore]`
+or the service fails closed at startup on the deploy rather than in CI.
+
+### Session: 2026-08-11 — DM2 planned (`/pc-plan DM2-make-it-real.md`)
+
+Materialized 9 task files under `.paircoder/tasks/` from
+`plans/backlogs/DM2-make-it-real.md`. Plan `plan-2026-08-dm2-make-it-real`
+already existed with all 9 ids registered in its phase; the task files were
+what was missing, and `bpsai-pair status` was reporting all 9 as not found.
+
+Each task file carries objective, files-to-update, an implementation plan
+anchored to the actual code it extends, the backlog's ACs, and verification
+commands. Added a **wiring AC** to seven of the nine — the backlog's ACs are
+strong on behavior but several would pass over a module that was written,
+unit-tested, and never called. Each names a call site, a configuration source
+with its default, and a failure mode.
+
+**Model assignments follow the backlog, not the calibration doctrine.**
+`calibration recommend-model` returns `claude-sonnet-5` for every complexity
+in this sprint (25–35) and `claude-opus-4-8` with `--cross-module`, both
+flagged `insufficient_samples`. The backlog assigns `claude-opus-5` to the
+four seam-defining tasks (DM2.1, DM2.2, DM2.4, DM2.9), which matches DM1's
+own convention — five of twelve DM1 task files carry `claude-opus-5`. The
+config's `models.providers.anthropic.models` list is stale relative to what
+the repo actually uses.
+
+PM provider is `none`, so this is local-only planning: no sync step.
+`bpsai-pair validate` passes; budget check per task ~20k tokens (2%), well
+under the 75% threshold.
 
 ### Session: 2026-08-11 — DM1.12 integration gate, sprint complete
 
@@ -692,8 +821,25 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 - Gates run: `bpsai-pair validate` passed; `budget check` ok on every task
   (~2% of context each); `plan estimate` 297,750 tokens; `plan feasibility`
   REFUSED on DM1.1, DM1.2, DM1.5.
+- Planned DM2: 9 task files materialized from plans/backlogs/DM2-make-it-real.md into plan-2026-08-dm2-make-it-real
+
 
 ## What's Next
+
+**Now (DM2).** DM2.1 is done, which unblocks wave 2: **DM2.2** (authenticated
+ingest) and **DM2.7** (an alarm that reaches Kevin) can run in parallel. Both
+consume `deadman.store`:
+
+- DM2.2 stores rows through `EvidenceStore.append`; idempotent replay is
+  already guaranteed by content-addressed `row_id`, so its "replayed batch
+  changes nothing" AC needs a test, not a mechanism. Its `collector_id` and
+  arrival-time fields go in `Evidence.detail` — `encode`/`decode` round-trip
+  `detail` verbatim.
+- DM2.7 records transport failures through the same store.
+- Whichever of DM2.2/DM2.6 first constructs a `FirestoreEvidenceStore` in the
+  deployed service must change the Dockerfile from `.` to `.[firestore]`.
+
+Items below are DM1-era and carried forward.
 
 1. **DONE — both GCP items landed.** The deploy is live at
    https://deadman-mrapac5nda-uc.a.run.app and the live Gemini call has run
@@ -732,6 +878,8 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
    filesystem); and the live demo must run unedited per the rules, so the
    break-and-heal sequence needs rehearsing end to end against the deployed
    URL, not locally.
+1. Start DM2.1 — evidence store Protocol seam and durable backend
+
 
 ## Blockers
 

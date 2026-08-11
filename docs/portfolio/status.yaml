@@ -1,9 +1,9 @@
 version: 1
-updated_at: '2026-08-11T02:33:29.315281+00:00'
+updated_at: '2026-08-11T19:25:49.406224+00:00'
 last_transition:
   event: task_done
-  at: '2026-08-11T02:33:29.315281+00:00'
-  task_id: DM1.7
+  at: '2026-08-11T19:25:49.406224+00:00'
+  task_id: DM2.1
 transitions:
 - event: dispatch
   at: '2026-08-11T00:55:41.784992+00:00'
@@ -69,6 +69,12 @@ transitions:
 - event: task_done
   at: '2026-08-11T02:33:29.315281+00:00'
   task_id: DM1.7
+- event: dispatch
+  at: '2026-08-11T19:15:27.761518+00:00'
+  task_id: DM2.1
+- event: task_done
+  at: '2026-08-11T19:25:49.406224+00:00'
+  task_id: DM2.1
 tasks:
   DM1.1:
     status: dispatched
@@ -107,3 +113,6 @@ tasks:
   DM1.7:
     status: done
     updated_at: '2026-08-11T02:33:29.315281+00:00'
+  DM2.1:
+    status: done
+    updated_at: '2026-08-11T19:25:49.406224+00:00'
