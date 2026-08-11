@@ -79,9 +79,7 @@ def run_probe(probe: Probe) -> Evidence:
         )
 
     if evidence.surface != probe.surface:  # correlation depends on stable ids
-        logger.warning(
-            "probe %s emitted evidence for %s", probe.surface, evidence.surface
-        )
+        logger.warning("probe %s emitted evidence for %s", probe.surface, evidence.surface)
     return evidence
 
 

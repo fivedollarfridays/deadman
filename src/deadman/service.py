@@ -31,12 +31,8 @@ def default_probes() -> list[Probe]:
     """Probes safe to run anywhere, Cloud Run included: no credentials, no
     outbound network. Everything else (Metricool, destinations, SMS relay)
     needs secrets this endpoint does not hold."""
-    brief_log = Path(
-        os.environ.get("DEADMAN_BRIEF_LOG", "/var/log/deadman/morning-brief.jsonl")
-    )
-    disk_history = Path(
-        os.environ.get("DEADMAN_DISK_HISTORY", "/tmp/deadman/disk-history.jsonl")
-    )
+    brief_log = Path(os.environ.get("DEADMAN_BRIEF_LOG", "/var/log/deadman/morning-brief.jsonl"))
+    disk_history = Path(os.environ.get("DEADMAN_DISK_HISTORY", "/tmp/deadman/disk-history.jsonl"))
     return [
         DiskProbe(history_path=disk_history),
         MorningBriefProbe(log_path=brief_log),

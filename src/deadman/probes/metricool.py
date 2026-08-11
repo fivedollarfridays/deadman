@@ -128,9 +128,7 @@ class MetricoolProbe:
             )
         # Silence is not health. Whether the calendar should have had posts in
         # it is a different question, and this probe answers neither by guessing.
-        return (
-            f"no posts reported published in the last {self.window_hours:g}h: nothing to verify"
-        )
+        return f"no posts reported published in the last {self.window_hours:g}h: nothing to verify"
 
     def _partition_by_time(
         self, posts: list[ScheduledPost]

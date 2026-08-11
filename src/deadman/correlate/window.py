@@ -117,9 +117,7 @@ def candidates(
     return found
 
 
-def _nearby(
-    blind: list[Evidence], group: list[Evidence], window_seconds: float
-) -> list[Evidence]:
+def _nearby(blind: list[Evidence], group: list[Evidence], window_seconds: float) -> list[Evidence]:
     start, end = group[0].read_at, group[-1].read_at
     return [
         e

@@ -129,8 +129,7 @@ def _reject_generated_body(action: Action) -> None:
         inspect.getsource(action.run)
     except OSError as exc:  # source file exists but does not contain the body
         raise NonDeterministicAction(
-            f"action {action.name!r} is not defined in a source file that can be "
-            f"read back: {exc}"
+            f"action {action.name!r} is not defined in a source file that can be read back: {exc}"
         ) from exc
 
 

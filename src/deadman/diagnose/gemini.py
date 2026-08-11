@@ -110,9 +110,7 @@ class GeminiClient:
         session = self._runner.session_service.create_session_sync(
             app_name=self.app_name, user_id=self.user_id
         )
-        message = self._types.Content(
-            role="user", parts=[self._types.Part(text=prompt)]
-        )
+        message = self._types.Content(role="user", parts=[self._types.Part(text=prompt)])
 
         chunks: list[str] = []
         for event in self._runner.run(
