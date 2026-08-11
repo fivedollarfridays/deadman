@@ -28,6 +28,15 @@ dev = [
 gemini = [
     "google-adk>=1.0",
 ]
+# Also deliberately NOT part of `dev`, for the same reason. The store's
+# contract suite runs the Firestore backend's mapping logic against an
+# in-process double (tests/firestore_double.py), so installing the real SDK
+# would buy the suite nothing and would quietly weaken
+# tests/test_store_seam.py, whose whole job is to prove the package imports
+# with no cloud SDK present. This is what a deploy installs, never a test run.
+firestore = [
+    "google-cloud-firestore>=2.16,<3",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
