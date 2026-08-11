@@ -1,0 +1,7 @@
+DM1.9 is complete. Summary:
+
+**Built** \`src/deadman/probes/sms_relay.py\` — \`SmsRelayProbe\`, following the same never-passive contract as the Metricool probe: it dispatches an active canary (\`Method.ACTIVE_CANARY\`) rather than inferring health from silence, treats dispatch acceptance as a claim (not evidence), and only confirms \`HEALTHY\` once a \`SentFolderReader\` finds the canary token at the destination. Unreachable-host and rejected-send are distinct dispatch outcomes (\`UNOBSERVABLE\` vs. \`FAULT\`, tagged in \`detail\["dispatch_outcome"\]\`). Cadence is throttled via an append-only history file (same pattern as \`disk.py\`), defaulting to 12h so real carrier sends aren't hammered every sweep — and outside that window, \`observe()\` returns \`UNOBSERVABLE\`, never \`HEALTHY\`.
+
+**Tests**: 14 new cases in \`tests/test_probe_sms_relay.py\`, all hermetic (sockets blocked suite-wide, no live network). Suite is now 61/61 green, \`ruff check\` and \`bpsai-pair arch check --strict\` both clean.
+
+All six acceptance criteria are checked off with evidence in the task file, \`bpsai-pair task update DM1.9 --status done\` passed the strict AC gate, and \`state.md\` is updated with the session entry, task table, and revised "What's Next" (DM1.5 is the next natural pickup as the P0 hub).
