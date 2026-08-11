@@ -89,6 +89,19 @@ class IngestEndpoint:
     store: EvidenceStore
     secret: bytes
     clock: Callable[[], datetime] = field(default=_now)
+    expectations: tuple[Any, ...] | None = None
+    """Declared collector duties, from :mod:`deadman.verify.expectations`.
+
+    When present, a batch may only carry surfaces its own collector declared.
+    One shared secret is distributed to every collector (per-collector secrets
+    are DM3), so without this a compromise of any one machine could forge
+    ``HEALTHY`` for *every* surface in the estate, including surfaces that
+    machine never sweeps — silently disarming the monitor rather than breaking
+    it. The declaration already exists for liveness, so binding to it is free.
+
+    ``None`` means no binding, which keeps an estate that has not declared
+    anything yet able to ingest.
+    """
 
     def handle(self, environ: dict) -> tuple[str, dict[str, Any]]:
         """``(status, payload)`` for one request. Never raises for bad input.
@@ -101,8 +114,9 @@ class IngestEndpoint:
         try:
             raw = _read_body(environ)
             check_signature(raw, environ.get(SIGNATURE_ENVIRON_KEY), self.secret)
-            batch = loads(raw)
+            batch = loads(raw, now=received_at)
             check_freshness(batch.signed_at, received_at)
+            self.check_declared(batch)
         except BodyTooLarge as exc:
             return _STATUS_TOO_LARGE, {"error": str(exc)}
         except AuthError as exc:
@@ -117,6 +131,27 @@ class IngestEndpoint:
             "stored": stored,
             "duplicates": duplicates,
         }
+
+    def check_declared(self, batch: Batch) -> None:
+        """Raise :class:`WireError` if a batch reports a surface its collector
+        never declared.
+
+        A :class:`WireError` rather than an auth error on purpose: the caller
+        proved it holds the shared secret, so this is a statement about the
+        *content* of an authenticated request, not about who sent it.
+        """
+        if self.expectations is None:
+            return
+        declared: set[str] = set()
+        for expectation in self.expectations:
+            if expectation.collector_id == batch.collector_id:
+                declared.update(expectation.surfaces)
+        undeclared = sorted({row.surface for row in batch.rows} - declared)
+        if undeclared:
+            raise WireError(
+                f"collector {batch.collector_id!r} did not declare "
+                f"{', '.join(repr(s) for s in undeclared)}"
+            )
 
     def _record(self, batch: Batch, received_at: datetime) -> tuple[int, int]:
         """Store what is new. One arrival time for the whole request, read

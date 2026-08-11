@@ -91,6 +91,12 @@ def on_arrival(evidence: Evidence, collector_id: str, received_at: datetime) -> 
     made, and ``collector_id`` names where; rewriting it would lose the only
     record of the real instrument.
     """
+    # These two are preserved when already present so that re-annotating an
+    # annotated row keeps the *original* claim and identity, which is what
+    # stops ingest laundering a relayed row into a fresh one. That is only
+    # safe because a client cannot put them here: ``wire.decode_row`` strips
+    # every service-owned key from untrusted input, so anything found here was
+    # written by this service. See ``wire.SERVICE_OWNED_DETAIL_KEYS``.
     detail = dict(evidence.detail)
     detail[REPORTED_METHOD] = detail.get(REPORTED_METHOD, evidence.method.value)
     detail[WIRE_ROW_ID] = detail.get(WIRE_ROW_ID) or row_id(evidence)

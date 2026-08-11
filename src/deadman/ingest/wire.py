@@ -26,9 +26,10 @@ an attack.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from deadman.evidence.model import Evidence, Method, Observation
@@ -42,6 +43,53 @@ WIRE_VERSION = 1
 #: this is orders of magnitude above any honest payload; it exists so a body
 #: that fits the byte cap cannot still cost an unbounded number of writes.
 MAX_ROWS = 500
+
+#: Most *distinct* surfaces one batch may name. The replay check reads back a
+#: bounded slice of history per distinct surface, so rows alone do not bound
+#: the cost of a request: 500 rows across 500 surfaces is 500 history queries.
+#: A real collector sweeps a handful, and repeated readings of the same surface
+#: are still free under :data:`MAX_ROWS`.
+MAX_SURFACES = 50
+
+#: How far ahead of this service's clock a collector's ``read_at`` may sit.
+#: Real clocks disagree by seconds; a reading from the future is not a reading.
+#: Without this, a forward-skewed row is judged fresh forever and also sorts
+#: newest forever — the staleness detection this project exists to build,
+#: disarmed by accident. See ``verify.collector_liveness._judge_surface``,
+#: which refuses the same shape again for rows stored before this guard.
+MAX_READ_AT_SKEW_SECONDS = 300.0
+
+#: Longest a free-text row field may be. Well above any honest summary, and far
+#: below the body cap, so one row cannot fill a batch with prose that then
+#: lands on the public board.
+MAX_TEXT_FIELD = 2000
+
+#: Longest a surface id may be, and the shape it must take. Firestore rejects
+#: ``""``, ``"."``, ``".."``, ``"__x__"`` and slashes as document ids, so an
+#: unvalidated surface is an exception at ``append`` — a 500 reached *after*
+#: the request was already authenticated and answered as acceptable.
+#: ``/`` is allowed because surface ids genuinely contain it (``host:mac/disk``)
+#: and ``store.base.surface_key`` percent-encodes before it reaches Firestore.
+#: What is refused is what stays unusable after that encoding, plus anything
+#: carrying whitespace or control characters into a document id.
+MAX_SURFACE_LENGTH = 200
+_SURFACE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+/-]*$")
+_RESERVED_SURFACES = frozenset({".", ".."})
+_RESERVED_SURFACE_PATTERN = re.compile(r"^__.*__$")
+
+#: Detail keys this service writes about a row, which a collector therefore may
+#: not supply. Stripped from every incoming row rather than merely overwritten,
+#: so downstream code can treat their presence as proof the service put them
+#: there — which is what lets ``arrival.on_arrival`` safely preserve them on a
+#: second annotation instead of laundering the original claim.
+#:
+#: A client-chosen ``wire_row_id`` is the sharp one: it is the dedupe identity,
+#: so choosing it to collide with a row already inside the replay lookback
+#: makes the service silently drop the new row and report the loss as
+#: ``stored: 0``. Evidence loss, selected by whoever sent the evidence.
+SERVICE_OWNED_DETAIL_KEYS = frozenset(
+    {"collector_id", "received_at", "wire_row_id", "reported_method"}
+)
 
 _REQUIRED_ROW_FIELDS = ("surface", "observation", "method", "summary", "source", "read_at")
 
@@ -78,16 +126,16 @@ def dumps(batch: Batch) -> bytes:
     return json.dumps(encode_batch(batch), sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def loads(raw: bytes) -> Batch:
+def loads(raw: bytes, now: datetime | None = None) -> Batch:
     """Parse and validate bytes from a collector. Raises :class:`WireError`."""
     try:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise WireError(f"body is not valid JSON: {exc}") from exc
-    return decode_batch(payload)
+    return decode_batch(payload, now=now)
 
 
-def decode_batch(payload: Any) -> Batch:
+def decode_batch(payload: Any, now: datetime | None = None) -> Batch:
     """Validate an already-parsed payload into a :class:`Batch`."""
     if not isinstance(payload, Mapping):
         raise WireError("batch must be a JSON object")
@@ -105,14 +153,19 @@ def decode_batch(payload: Any) -> Batch:
     if len(rows) > MAX_ROWS:
         raise WireError(f"batch carries {len(rows)} rows, the cap is {MAX_ROWS}")
 
+    decoded = tuple(decode_row(row, now=now) for row in rows)
+    distinct = {row.surface for row in decoded}
+    if len(distinct) > MAX_SURFACES:
+        raise WireError(f"batch names {len(distinct)} distinct surfaces, the cap is {MAX_SURFACES}")
+
     return Batch(
         collector_id=collector_id,
         signed_at=_timestamp(payload.get("signed_at"), "signed_at"),
-        rows=tuple(decode_row(row) for row in rows),
+        rows=decoded,
     )
 
 
-def decode_row(row: Any) -> Evidence:
+def decode_row(row: Any, now: datetime | None = None) -> Evidence:
     """One evidence row from untrusted input.
 
     Unknown enum values are refused rather than coerced. Defaulting an
@@ -128,22 +181,65 @@ def decode_row(row: Any) -> Evidence:
     for name in ("surface", "summary", "source"):
         if not isinstance(row[name], str):
             raise WireError(f"row field {name!r} must be a string")
+    for name in ("summary", "source"):
+        if len(row[name]) > MAX_TEXT_FIELD:
+            raise WireError(
+                f"row field {name!r} is {len(row[name])} chars, the cap is {MAX_TEXT_FIELD}"
+            )
 
     detail = row.get("detail")
     if detail is None:
         detail = {}
     if not isinstance(detail, Mapping):
         raise WireError("row field 'detail' must be a JSON object")
+    detail = {k: v for k, v in detail.items() if k not in SERVICE_OWNED_DETAIL_KEYS}
 
     return Evidence(
-        surface=row["surface"],
+        surface=_surface(row["surface"]),
         observation=_member(Observation, row["observation"], "observation"),
         method=_member(Method, row["method"], "method"),
         summary=row["summary"],
         source=row["source"],
-        read_at=_timestamp(row["read_at"], "read_at"),
+        read_at=_read_at(row["read_at"], now),
         detail=dict(detail),
     )
+
+
+def _surface(value: str) -> str:
+    """A surface id this service can actually store under.
+
+    Refused here rather than at ``append`` because by then the request has been
+    authenticated and implicitly accepted: the caller would see a 500 for input
+    that was always unusable.
+    """
+    if len(value) > MAX_SURFACE_LENGTH:
+        raise WireError(f"surface is {len(value)} chars, the cap is {MAX_SURFACE_LENGTH}")
+    if (
+        value in _RESERVED_SURFACES
+        or _RESERVED_SURFACE_PATTERN.match(value)
+        or not _SURFACE_PATTERN.match(value)
+    ):
+        raise WireError(f"surface {value!r} is not a usable id")
+    return value
+
+
+def _read_at(value: Any, now: datetime | None) -> datetime:
+    """The collector's reading time, refused if it is implausibly ahead of ours.
+
+    A reading from the future is not a reading. Left unchecked it is judged
+    fresh forever (its age is negative, so it never exceeds any window) and it
+    also sorts newest forever, which disarms staleness detection for that
+    surface permanently.
+    """
+    read_at = _timestamp(value, "read_at")
+    moment = instant(now) if now is not None else datetime.now(timezone.utc)
+    ahead = (read_at - moment).total_seconds()
+    if ahead > MAX_READ_AT_SKEW_SECONDS:
+        raise WireError(
+            f"read_at is {int(ahead)}s ahead of this service's clock, the allowed "
+            f"skew is {MAX_READ_AT_SKEW_SECONDS:g}s"
+        )
+    return read_at
 
 
 def _member(enum: type, value: Any, name: str) -> Any:

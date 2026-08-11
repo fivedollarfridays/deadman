@@ -113,11 +113,20 @@ def verify(
 
 
 def check_signature(body: bytes, signature: str | None, secret: bytes) -> None:
-    """Raise :class:`AuthError` unless ``body`` carries a valid MAC."""
+    """Raise :class:`AuthError` unless ``body`` carries a valid MAC.
+
+    ``hmac.compare_digest`` raises ``TypeError`` when either ``str`` argument
+    contains a non-ASCII character, and WSGI hands header values through as
+    latin-1 ``str``. A header of ``ü`` therefore used to reach an unhandled
+    exception from an unauthenticated caller. A signature that is not ASCII
+    hex cannot be a valid MAC, so it is refused as one rather than crashed on.
+    """
     if signature is None or not signature.strip():
         raise AuthError("missing signature")
-    expected = sign(body, secret)
-    if not hmac.compare_digest(expected, signature.strip().lower()):
+    candidate = signature.strip().lower()
+    if not candidate.isascii():
+        raise AuthError("signature does not match")
+    if not hmac.compare_digest(sign(body, secret), candidate):
         raise AuthError("signature does not match")
 
 

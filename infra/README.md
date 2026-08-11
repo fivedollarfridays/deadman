@@ -364,8 +364,14 @@ sourced from `~/.deadman/collector-env.sh` at run time, the same rule
 `tests/test_ingest_startup.py::TestNothingSecretIsCommitted` already
 enforces on the service side:
 
+The **directory** permission matters as much as the file's. The plist `source`s
+this script as you, so anyone who can create or replace a file in `~/.deadman`
+gets code execution in your session — and `mkdir -p` alone leaves the directory
+at whatever your umask happens to be:
+
 ```bash
 mkdir -p ~/.deadman
+chmod 700 ~/.deadman
 cat > ~/.deadman/collector-env.sh <<'EOF'
 export DEADMAN_INGEST_SECRET="the same value the Cloud Run service has"
 EOF
@@ -373,15 +379,25 @@ chmod 600 ~/.deadman/collector-env.sh
 ```
 
 Then materialize `infra/launchd/com.deadman.collector.plist` with real paths
-and load it — one command:
+and load it. **Validate the generated plist before loading it**: the paths are
+interpolated into XML, so a path containing `&`, `<` or `#` produces a file
+that is either malformed or silently wrong, and `launchctl` failing later is a
+much worse place to find out:
 
 ```bash
 sed \
   -e "s#__DEADMAN_COLLECTOR_BIN__#$(command -v deadman-collector)#" \
   -e "s#__DEADMAN_COLLECTOR_CONFIG__#$PWD/infra/collector/collector.example.json#" \
   infra/launchd/com.deadman.collector.plist > ~/Library/LaunchAgents/com.deadman.collector.plist \
+  && plutil -lint ~/Library/LaunchAgents/com.deadman.collector.plist \
   && launchctl load ~/Library/LaunchAgents/com.deadman.collector.plist
 ```
+
+`plutil -lint` is the gate: if the substitution corrupted the XML the chain
+stops there and nothing is loaded, rather than launchd quietly refusing to run
+a job you believe is installed. (`#` is the `sed` delimiter above, so a
+repository path containing `#` breaks the substitution itself — if `plutil`
+complains, check `$PWD` before anything else.)
 
 launchd now runs the collector every 15 minutes (`StartInterval`, see the
 plist's own comment for why not a calendar interval) and once immediately

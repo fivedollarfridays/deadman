@@ -36,6 +36,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from wsgiref.simple_server import make_server
 
+from deadman import redact
 from deadman import scheduled as scheduled_pkg
 from deadman.evidence.model import Evidence, Observation
 from deadman.ingest.auth import secret_from_env
@@ -44,9 +45,7 @@ from deadman.probes.base import Probe, blind_spots, sweep
 from deadman.probes.disk import DiskProbe
 from deadman.probes.morning_brief import MorningBriefProbe
 from deadman.self_check import SelfEvidenceLog, StoreSelfEvidenceLog
-from deadman.store.base import EvidenceStore
-from deadman.store.firestore import FirestoreEvidenceStore
-from deadman.store.memory import InMemoryEvidenceStore
+from deadman.store import EvidenceStore, FirestoreEvidenceStore, InMemoryEvidenceStore
 from deadman.verify.collector_liveness import LivenessReport, assess
 from deadman.verify.expectations import CollectorExpectation, load_expectations
 
@@ -85,14 +84,22 @@ def default_probes() -> list[Probe]:
 
 
 def _evidence_row(evidence: Evidence) -> dict[str, object]:
+    """One board row, redacted for an unauthenticated reader.
+
+    ``GET /`` is deployed ``--allow-unauthenticated`` and its URL is published,
+    so everything here is world-readable. Before DM2 the rows came only from
+    probes running in this process; ingest means they now carry a collector's
+    absolute paths, its id, and our arrival times, and publishing those verbatim
+    hands a stranger a map of Kevin's machines.
+    """
     return {
         "surface": evidence.surface,
         "observation": evidence.observation.value,
         "method": evidence.method.value,
         "summary": evidence.summary,
-        "source": evidence.source,
+        "source": redact.public_source(evidence.source),
         "read_at": evidence.read_at.isoformat(),
-        "detail": evidence.detail,
+        "detail": redact.public_detail(evidence.detail),
     }
 
 

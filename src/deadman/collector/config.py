@@ -34,6 +34,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from deadman.probes.base import Probe
 from deadman.probes.disk import DiskProbe
@@ -105,7 +106,7 @@ def parse_config(payload: Any) -> CollectorConfig:
             raise ConfigError(f"config is missing required key {key!r}")
 
     collector_id = _require_str(payload, "collector_id")
-    ingest_url = _require_str(payload, "ingest_url")
+    ingest_url = _require_ingest_url(payload)
 
     raw_probes = payload["probes"]
     if not isinstance(raw_probes, list) or not raw_probes:
@@ -120,6 +121,32 @@ def parse_config(payload: Any) -> CollectorConfig:
         ingest_url=ingest_url.rstrip("/"),
         probes=tuple(_parse_probe_spec(i, entry) for i, entry in enumerate(raw_probes)),
         spool_dir=Path(spool_dir),
+    )
+
+
+#: Hosts where plaintext ingest is acceptable: there is no network path to sit
+#: on, and refusing it would leave no way to develop against a local service.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _require_ingest_url(payload: Mapping[str, Any]) -> str:
+    """The ingest endpoint, which must not be plaintext.
+
+    The batch is signed, but a signature proves origin and not secrecy: over
+    ``http`` the evidence and its MAC are both readable on the path, and the
+    MAC stays replayable for the whole freshness window. Loopback is exempt
+    because there is no path to sit on, and refusing it would mean no way to
+    develop against a local service.
+    """
+    value = _require_str(payload, "ingest_url")
+    parsed = urlparse(value)
+    if parsed.scheme == "https":
+        return value
+    if parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS:
+        return value
+    raise ConfigError(
+        f"config key 'ingest_url' must use https (got {parsed.scheme or 'no'} scheme); "
+        "plaintext http is accepted only for loopback development"
     )
 
 

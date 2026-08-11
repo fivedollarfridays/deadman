@@ -240,9 +240,34 @@ def _judge_surface(
         return _UNREPORTED, _never_reported(surface, expectation)
 
     age = (moment - instant(stored.read_at)).total_seconds()
+    if age < 0:
+        return _STALE, _from_the_future(stored, -age)
     if age > expectation.silence_after_seconds:
         return _STALE, _too_old(stored, expectation, age)
     return _FRESH, stored
+
+
+def _from_the_future(stored: Evidence, ahead: float) -> Evidence:
+    """A row whose ``read_at`` is ahead of our clock says nothing about now.
+
+    ``deadman.ingest.wire`` refuses these at the door, so reaching this branch
+    means the row predates that guard or arrived by another path. It is judged
+    here too because the failure is silent and permanent: a negative age never
+    exceeds the silence window, so the row would read fresh forever, and the
+    store orders by ``read_at``, so it would also stay newest forever. Treating
+    it as blindness rather than health is the whole argument of this project
+    applied to our own data.
+    """
+    return unobservable(
+        surface=stored.surface,
+        source=SOURCE,
+        why=(
+            f"{stored.surface} has a reading {int(ahead)}s in the future, so its "
+            "freshness cannot be judged; suspect a skewed clock on the reporting collector"
+        ),
+        read_at_ahead_seconds=ahead,
+        reported_read_at=instant(stored.read_at).isoformat(),
+    )
 
 
 def _never_reported(surface: str, expectation: CollectorExpectation) -> Evidence:

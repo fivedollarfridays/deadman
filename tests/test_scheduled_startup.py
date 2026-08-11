@@ -67,3 +67,69 @@ class TestStartupRefusal:
 
         assert result.returncode != 0
         assert "SchedulerNotConfigured" in result.stderr
+
+
+class TestNothingSecretIsCommitted:
+    """The scheduler secret's equivalent of the ingest scan.
+
+    Ingest had this guard from DM2.2 and the scheduler secret shipped without
+    one. It also needs a second pattern that ingest never did: this secret is
+    documented as a Cloud Scheduler bearer, so it appears as
+    ``Authorization=Bearer <value>`` as well as ``VAR=value``, and a scan
+    written only for the latter would pass while a live token sat in the
+    runbook.
+    """
+
+    #: Shapes that are not secrets. Short and enumerated on purpose: growing
+    #: this list is the moment to ask whether a real value is being smuggled in.
+    ALLOWED = ("$", "deadman-scheduler-secret:")
+
+    def _matches(self, pattern: str, *paths: str) -> list[str]:
+        found = subprocess.run(
+            ["git", "grep", "-hI", "-o", "-E", pattern, "--", *(paths or (".",))],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return found.stdout.splitlines()
+
+    def _assignments(self) -> list[str]:
+        raw = self._matches(f"{SECRET_ENV}=[^\"'\x60 ]*")
+        return [line.split("=", 1)[1] for line in raw]
+
+    def _bearers(self) -> list[str]:
+        # This file is excluded because it *contains* the bearer pattern as a
+        # string literal, so the scan matches its own source and reports the
+        # regex fragment as a committed token. The ingest scan avoids this by
+        # delimiter choice; a bracketed character class cannot. The exclusion
+        # is narrow and safe: ``_assignments`` above still scans this file for
+        # the ``VAR=value`` shape, so a real secret pasted here is still caught.
+        raw = self._matches(
+            "Authorization=Bearer [^\"'\x60 ]*",
+            ".",
+            ":(exclude)tests/test_scheduled_startup.py",
+        )
+        return [line.split("Bearer ", 1)[1] for line in raw]
+
+    def test_every_committed_assignment_resolves_rather_than_carrying_a_value(self):
+        for value in self._assignments():
+            if not value:
+                continue
+            assert value.startswith(self.ALLOWED), f"{SECRET_ENV} looks committed as {value!r}"
+
+    #: ``$…`` resolves at run time; ``<…>`` is an angle-bracket placeholder in a
+    #: runbook. Neither can be a live token, and a real one matches neither.
+    ALLOWED_BEARERS = ("$", "<")
+
+    def test_every_committed_bearer_resolves_rather_than_carrying_a_value(self):
+        for value in self._bearers():
+            if not value:
+                continue
+            assert value.startswith(self.ALLOWED_BEARERS), (
+                f"a bearer token looks committed as {value!r}"
+            )
+
+    def test_the_scan_is_actually_finding_the_documented_assignments(self):
+        """Guards the guard: a broken pattern would pass by finding nothing."""
+        assert self._assignments(), "the secret scan matched nothing, so it proves nothing"

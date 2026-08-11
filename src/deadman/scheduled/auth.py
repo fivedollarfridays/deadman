@@ -76,5 +76,10 @@ def check_secret(authorization: str | None, secret: str) -> None:
     if authorization is None or not authorization.startswith(_SCHEME):
         raise SchedulerAuthError("missing or malformed Authorization header")
     provided = authorization[len(_SCHEME) :].strip()
-    if not provided or not hmac.compare_digest(provided, secret):
+    # ``compare_digest`` raises TypeError on a non-ASCII ``str``, and WSGI
+    # header values arrive as latin-1 ``str`` — an unauthenticated route to an
+    # unhandled 500. A non-ASCII token cannot match, so refuse it as a token.
+    if not provided or not provided.isascii():
+        raise SchedulerAuthError("bearer token does not match")
+    if not hmac.compare_digest(provided, secret):
         raise SchedulerAuthError("bearer token does not match")
