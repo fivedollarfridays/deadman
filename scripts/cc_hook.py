@@ -54,81 +54,32 @@ def build(handler: str, data: dict) -> list[str]:
     """Build the bpsai-pair argv for ``handler`` from the hook ``data``."""
     if handler in ("containment-read", "containment-write"):
         op = "read" if handler.endswith("read") else "write"
-        return [
-            "bpsai-pair",
-            "enforce",
-            "containment",
-            "--file",
-            _get(data, "tool_input.file_path"),
-            "--operation",
-            op,
-        ]
+        return ["bpsai-pair", "enforce", "containment",
+                "--file", _get(data, "tool_input.file_path"), "--operation", op]
     if handler in ("task-edit", "state-edit"):
         # Edit delivers tool_input.new_string; Write delivers tool_input.content.
         content = _get(data, "tool_input.new_string") + _get(data, "tool_input.content")
-        return [
-            "bpsai-pair",
-            "enforce",
-            handler,
-            "--file",
-            _get(data, "tool_input.file_path"),
-            "--new-content",
-            content,
-        ]
+        return ["bpsai-pair", "enforce", handler,
+                "--file", _get(data, "tool_input.file_path"), "--new-content", content]
     if handler == "compact":
-        return [
-            "bpsai-pair",
-            "compaction",
-            "snapshot",
-            "save",
-            "--trigger",
-            _get(data, "trigger"),
-            "--quiet",
-        ]
+        return ["bpsai-pair", "compaction", "snapshot", "save",
+                "--trigger", _get(data, "trigger"), "--quiet"]
     if handler in ("teammate-idle", "task-completed"):
         event = "teammate_idle" if handler == "teammate-idle" else "task_completed"
-        return [
-            "bpsai-pair",
-            "orchestrate",
-            "evaluate",
-            event,
-            "--agent-id",
-            _get(data, "agent_id"),
-            "--agent-type",
-            _get(data, "agent_type"),
-            "--quiet",
-        ]
+        return ["bpsai-pair", "orchestrate", "evaluate", event,
+                "--agent-id", _get(data, "agent_id"),
+                "--agent-type", _get(data, "agent_type"), "--quiet"]
     if handler == "stop-failure":
-        return [
-            "bpsai-pair",
-            "telemetry",
-            "log-failure",
-            "--trigger",
-            _get(data, "error_type"),
-            "--quiet",
-        ]
+        return ["bpsai-pair", "telemetry", "log-failure",
+                "--trigger", _get(data, "error_type"), "--quiet"]
     if handler == "session-end":
-        return [
-            "bpsai-pair",
-            "telemetry",
-            "log-session-end",
-            "--stop-reason",
-            _get(data, "stop_reason"),
-            "--quiet",
-        ]
+        return ["bpsai-pair", "telemetry", "log-session-end",
+                "--stop-reason", _get(data, "stop_reason"), "--quiet"]
     if handler == "subagent-stop":
-        return [
-            "bpsai-pair",
-            "telemetry",
-            "log-subagent-outcome",
-            "--stop-reason",
-            _get(data, "stop_reason"),
-            "--agent-id",
-            _get(data, "agent_id"),
-            "--agent-type",
-            _get(data, "agent_type"),
-            "--quiet",
-        ]
+        return ["bpsai-pair", "telemetry", "log-subagent-outcome",
+                "--stop-reason", _get(data, "stop_reason"),
+                "--agent-id", _get(data, "agent_id"),
+                "--agent-type", _get(data, "agent_type"), "--quiet"]
     raise SystemExit(f"cc_hook: unknown handler '{handler}'")
 
 

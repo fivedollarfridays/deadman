@@ -35,5 +35,13 @@ markers = [
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.format]
+# bpsai-pair generates and regenerates scripts/cc_hook.py, so it is vendor
+# code whose style we do not own. Formatting it once already cost a real arch
+# violation: expanding its return lists pushed build() from under the 50-line
+# cap to 80, failing `arch check --strict` on a change that touched no deadman
+# source. Excluded from the formatter only — `ruff check` still lints it.
+exclude = ["scripts/cc_hook.py"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I"]
