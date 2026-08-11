@@ -91,6 +91,16 @@ class DiskProbe:
                 **detail,
             )
 
+        return self._trend_result(free, free_gb, series, src, detail)
+
+    def _trend_result(
+        self,
+        free: int,
+        free_gb: float,
+        series: list[tuple[datetime, int]],
+        src: str,
+        detail: dict[str, object],
+    ) -> Evidence:
         slope = _bytes_per_day(series)
         if slope is None:
             # One sample is a level, not a trend. Say so rather than implying

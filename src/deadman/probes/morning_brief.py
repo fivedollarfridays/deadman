@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from deadman.evidence.model import Evidence, Method, Observation, unobservable
@@ -59,21 +59,7 @@ class MorningBriefProbe:
         src = str(self.log_path)
 
         if not self.log_path.exists():
-            # Distinguish "the rail never produced evidence" from "we were
-            # pointed somewhere that does not exist". A missing log inside a
-            # directory that exists is a real finding. A missing directory is
-            # a configuration problem, and calling that a fault would be
-            # blaming the brief for our own bad path.
-            if self.log_path.parent.is_dir():
-                return self._fault(
-                    "send log absent: no brief has ever been verifiably sent",
-                    src,
-                    last_send_at=None,
-                    age_hours=None,
-                )
-            return unobservable(
-                SURFACE, src, "log directory does not exist (path misconfigured?)"
-            )
+            return self._missing_log_result(src)
 
         try:
             rows = [
@@ -103,6 +89,26 @@ class MorningBriefProbe:
                 last_row=rows[-1][:200],
             )
 
+        return self._age_result(last_send, len(rows), src)
+
+    def _missing_log_result(self, src: str) -> Evidence:
+        # Distinguish "the rail never produced evidence" from "we were
+        # pointed somewhere that does not exist". A missing log inside a
+        # directory that exists is a real finding. A missing directory is
+        # a configuration problem, and calling that a fault would be
+        # blaming the brief for our own bad path.
+        if self.log_path.parent.is_dir():
+            return self._fault(
+                "send log absent: no brief has ever been verifiably sent",
+                src,
+                last_send_at=None,
+                age_hours=None,
+            )
+        return unobservable(
+            SURFACE, src, "log directory does not exist (path misconfigured?)"
+        )
+
+    def _age_result(self, last_send: datetime, row_count: int, src: str) -> Evidence:
         now = datetime.now(timezone.utc)
         age_h = (now - last_send).total_seconds() / 3600.0
 
@@ -114,14 +120,14 @@ class MorningBriefProbe:
                 src,
                 f"last send is {abs(age_h):.1f}h in the future (clock skew?)",
                 last_send_at=last_send.isoformat(),
-                row_count=len(rows),
+                row_count=row_count,
             )
 
         detail = {
             "last_send_at": last_send.isoformat(),
             "age_hours": round(age_h, 2),
             "window_hours": self.window_hours,
-            "row_count": len(rows),
+            "row_count": row_count,
         }
 
         if age_h > self.window_hours:

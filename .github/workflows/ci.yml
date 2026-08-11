@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with pinned toolchain
+        run: |
+          pip install -e ".[dev]" -c constraints.txt
+
+      - name: pytest
+        run: pytest -q
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: arch check --strict
+        run: |
+          pip install bpsai-pair==2.42.0
+          bpsai-pair arch check --strict

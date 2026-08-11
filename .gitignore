@@ -1,9 +1,22 @@
 .venv/
-.venv-experimental/
+.venv*/
 __pycache__/
 *.pyc
 agent_pack.tgz
 *.bak
+
+# Build output
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Probe history artifacts (runtime-generated, never checked in)
+*-history.jsonl
 
 # PairCoder — ephemeral/session data
 .claude/settings.local.json
