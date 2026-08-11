@@ -5,12 +5,15 @@
 <!-- paircoder:state:begin -->
 ## Active Plan
 
-**Plan:** `plan-2026-08-dm1-deadman-v1` — DM1: deadman v1 (contest-ready)
-**Status:** Planned, not started
-**Current Sprint:** DM1
-**Backlog:** `plans/backlogs/DM1-deadman-v1.md`
-**Brief:** `docs/SPRINT-BRIEF-DM1.md`
-**Branch:** `engage/dm1-deadman-v1`
+**Plan:** `plan-2026-08-dm2-make-it-real` — DM2: make it real
+**Status:** Planned, not started — 9 task files materialized
+**Current Sprint:** DM2
+**Backlog:** `plans/backlogs/DM2-make-it-real.md`
+**Brief:** `docs/SPRINT-BRIEF-DM2.md`
+**Branch:** `engage/dm2-make-it-real`
+
+**Previous sprint:** `plan-2026-08-dm1-deadman-v1` — DM1, 12 of 12 `done`,
+merged. Live at https://deadman-mrapac5nda-uc.a.run.app.
 
 Silent-failure detection and remediation for heterogeneous infrastructure.
 Submission target: All Things Agentic, Taskmaster category, **deadline
@@ -18,16 +21,36 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-**All twelve tasks are `done`. The DM1 sprint is complete.** The submission
-is assembled: live service, live Gemini path, rehearsed demo, generated
-samples, architecture diagram and README.
+**DM1 built a monitor that has never monitored anything.** It is a library, a
+test suite, and an endpoint that sweeps when a human sends it a GET. Nothing
+runs on a cadence, nothing survives a cold start, and zero surfaces watch real
+infrastructure. DM2 makes it real.
 
-Remaining before the **2026-08-31 5:00pm PDT** deadline is submission work
-rather than build work: record the demo take, write the Devpost entry, and
-flip the repository public.
+**The finding that justifies the sprint.** Pointing the existing
+`MorningBriefProbe` at `~/ops/data/brief-send-log.jsonl` with no new code
+returned FAULT immediately: no brief sent since 2026-08-04 06:56. Seven days,
+undetected, because the brief is itself the alerting channel and a dead brief
+cannot report its own death. That is the doctrine's canonical failure, live, in
+the estate this was built for.
+
+**The central architectural fact.** The surfaces are not where the service is.
+Cloud Run cannot read a log on the Mac, and opening inbound access to a laptop
+is the wrong answer. So DM2 splits into a **collector** that runs where the
+surfaces live and ships evidence to an authenticated ingest endpoint, and the
+hosted **service** that stores, correlates and alerts. This is a topology
+change, not a config change, and it drives the dependency graph.
+
+**Two commitments that constrain every task.** `pyproject.toml` declares
+`dependencies = []` — every new backend follows the `GeminiClient` seam
+(optional extra plus SDK imported inside the constructor). And evidence
+crossing a wire changes its provenance: the service receives a *report of* a
+local reading, and silently upgrading the method on arrival reintroduces the
+heartbeat this project exists to argue against.
+
+### Carried forward from DM1
 
 **The service is live and public** at https://deadman-mrapac5nda-uc.a.run.app
-(project `deadman-20260810`). `GET /` returns the board.
+(project `deadman-20260810`). `GET /` returns the board. DM2.6 redeploys it.
 
 **Contest eligibility is no longer at risk.** The live Gemini call has now
 happened: `gemini-3.5-flash` through the ADK, returning a structured
@@ -41,7 +64,35 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, all 12 `done`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 5 `done`, 2 `blocked`
+
+| ID | Title | Pri | Cx | Model | Depends on |
+|---|---|---|---|---|---|
+| DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
+| DM2.2 | Authenticated ingest, and what a reported observation means ✓ | P0 | 35 | claude-opus-5 | DM2.1 |
+| DM2.7 | An alarm that actually reaches Kevin — **blocked** | P0 | 30 | claude-sonnet-5 | DM2.1 |
+| DM2.3 | The collector: sweep where the surfaces actually are ✓ | P0 | 35 | claude-sonnet-5 | DM2.2 |
+| DM2.4 | Collector liveness: absence must not read as health ✓ | P0 | 30 | claude-opus-5 | DM2.2 |
+| DM2.5 | Real surfaces, starting with the one already broken ✓ | P0 | 30 | claude-sonnet-5 | DM2.3 |
+| DM2.6 | Scheduled sweeps and scheduled self-check — **blocked** | P0 | 25 | claude-sonnet-5 | DM2.4 |
+| DM2.8 | The board grows a memory | P1 | 25 | claude-sonnet-5 | DM2.6 |
+| DM2.9 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | all |
+
+**Waves:** `DM2.1` → `DM2.2 DM2.7` → `DM2.3 DM2.4` → `DM2.5 DM2.6` →
+`DM2.8` → `DM2.9`
+
+**File collisions:** none inside a wave. DM2.6 and DM2.8 both edit
+`service.py`, resolved by making DM2.8 depend on DM2.6 — costs one wave,
+removes the conflict.
+
+**Cut list, in order:** DM2.8, then DM2.5's disk surfaces leaving only the
+morning brief. **Nothing else is cuttable.** Cutting DM2.4 would ship a
+monitor whose silence is ambiguous, which is worse than shipping nothing.
+
+**Privileged:** DM2.6 touches live billable cloud infrastructure
+(`deadman-20260810`). DM2.7 sends one real email over the ops rail.
+
+### Previous Sprint (DM1) — 12 tasks, 345 Cx, all 12 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -65,10 +116,485 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ### Backlog
 
-Out of scope for DM1 (v2): general surface registry, multi-brand support,
-retiring the seven existing point-solution monitors.
+Out of scope for DM2 (DM3 or later): grounding reliability and the 1-in-4
+ungrounded rate measured across 50+ live calls; the live correlation demo;
+Metricool and the phone relay as real surfaces (both need credentials and a
+destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
+— deadman's job is to notice it, and it already does; retiring the seven
+existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.6 blocked: the scheduled self-check is real, the live infra is not yet touched
+
+New package `src/deadman/scheduled/` (`auth.py`, `endpoint.py`), mirroring
+`deadman.ingest`'s shape but simpler — there is no body to authenticate, only
+a trigger, so it's a bearer token compared with `hmac.compare_digest` rather
+than an HMAC-over-bytes scheme. `DEADMAN_SCHEDULER_SECRET` is mandatory at
+import, same doctrine as `DEADMAN_INGEST_SECRET`: a missing secret is a
+refusal, not a default, because a public endpoint that triggers work is a
+free denial-of-service.
+
+`src/deadman/self_check.py` gained `SelfEvidenceSink` (a `Protocol` both the
+old filesystem log and the new store-backed one satisfy — `self_check()` and
+`run_self_check()` needed no behavior change, just a broadened type hint) and
+`StoreSelfEvidenceLog`, which writes through the DM2.1
+`EvidenceStore` on surface `self:sweep` instead of a per-instance file. This
+is what retires DM1.11's stated cold-start limitation: a fresh Cloud Run
+instance shares no filesystem with the one that swept before it, but it does
+share the store.
+
+`ScheduledSelfCheckEndpoint.handle` (in the new package) checks the secret,
+reads the *prior* row's liveness before writing a new one — checking after
+writing would always read LIVE, since the row just written is by
+construction fresh, and a self-check that cannot fail proves nothing — then
+sweeps `default_probes()` and records through the store. Wired into
+`deadman.service.build_app` via `default_scheduled`, alongside the existing
+`ingest` and `liveness_fn` optional endpoints on `make_app`.
+
+**Reducing import count paid for the wiring.** Adding two new `from`-imports
+to `service.py` tripped `arch check --strict`'s "more than 20 imports"
+threshold (`21 > 20`). Fixed by importing `deadman.scheduled` as a namespace
+(`from deadman import scheduled as scheduled_pkg`) rather than importing
+each name separately — one import statement instead of two, and it also
+sidesteps a real shadowing bug the alias route would have hit: `make_app`'s
+own parameter is named `scheduled`, so `from deadman.scheduled import
+ScheduledSelfCheckEndpoint` inside that function's closure would have made
+`scheduled.handle(...)` resolve to the *parameter* (the endpoint instance),
+not the module, the moment both were in scope with the same name.
+
+34 new tests across four files (`test_scheduled_auth.py`,
+`test_self_check_store.py`, `test_service_schedule.py`,
+`test_scheduled_startup.py`), all passing on first run against the
+implementation — the design was worked out from reading the existing
+`ingest`/`self_check`/`store` modules closely enough that the auth,
+routing, and cold-start-survival tests needed no iteration.
+`test_service_schedule.py::TestSelfEvidenceSurvivesACleanReadFromAnotherInstance`
+is the AC5 proof: two independently-built `make_app` instances, each with
+its own `ScheduledSelfCheckEndpoint` and `StoreSelfEvidenceLog`, sharing
+nothing but one `InMemoryEvidenceStore` — the second instance never received
+the first's request, and still reads `liveness_before: "live"` off the
+row the first one wrote.
+
+**Blocked on two ACs, not done: enabling Cloud Scheduler and verifying a
+fired job.** See Blocker 5. This sandboxed worktree has no `gcloud` CLI
+(`command not found`) and no ADC (`~/.config/gcloud` absent), discovered
+before writing `infra/scheduler.md` rather than assumed. Every command that
+touches the live project — API enable, secret provisioning, job creation,
+the trigger-and-read-back verification via `FirestoreEvidenceStore` — is
+written out exactly and reproducibly in `infra/scheduler.md`, following the
+same "runbook nobody has executed is a hypothesis" discipline DM1.8 and
+DM2.7 already paid for, but not run. `bpsai-pair task update DM2.6 --status
+done` correctly refused on the two unchecked items; set to `blocked` rather
+than forced through. Every other AC is checked off with evidence in
+`.paircoder/tasks/DM2.6.task.md`. Gates: `pytest -n auto --dist=worksteal`
+528/528, `ruff check .` and `ruff format --check .` clean, `bpsai-pair arch
+check --strict` clean.
+
+### Session: 2026-08-11 — DM2.5 done: real surfaces, one already broken
+
+Wired the collector to actual infrastructure rather than synthetic tests. 9
+new tests (494 total, up from 485), all four gates clean.
+
+**The morning brief fault is captured for real, not described.**
+`MorningBriefProbe` was run this session against the real
+`~/ops/data/brief-send-log.jsonl`: `FAULT`, "no brief sent in 176.7h (window
+30h, ~7 missed)", last real send `2026-08-04T11:56:45`. That evidence is
+committed verbatim as `tests/fixtures/real-morning-brief-fault.json`
+(new directory, own README distinguishing it from `tests/recorded/`'s
+authored-or-captured *model* responses — this is a captured *probe* reading,
+no model involved), pinned by `tests/test_real_evidence_fixtures.py` so a
+future recapture that happened to land `HEALTHY` (the ops bug got fixed)
+would fail loudly rather than quietly stop being evidence of anything.
+DM2.9's case study reads from this rather than from memory.
+
+**Two machines, one probe, and a surface id that cannot collide.**
+`DiskProbe` gained a `host` field (`src/deadman/probes/disk.py`), blank by
+default so `service.py`'s own Cloud Run probes (`host:disk/`, watching the
+ephemeral container filesystem, unrelated to the real Mac or rig) are
+untouched. Set to `"mac"` or `"rig"` it produces `host:mac/disk` /
+`host:rig/disk` — a naming scheme every correlation/diagnose/ingest test
+fixture already assumed (`host:mac/disk` appears dozens of times across
+`tests/recorded/*.json` and elsewhere) but that no real probe had ever
+actually produced until now. `infra/collector/collector-rig.example.json` is
+new and is the entire proof of the "config edit plus an existing probe" AC:
+same `disk` probe type as the Mac's config, different `host`/`collector_id`,
+zero new probe code. `infra/collector/collectors.example.json` now declares
+both collectors.
+
+**"Missing path" got an explicit `detail["path"]`, not just an embedded
+string.** Both `DiskProbe`'s `unobservable()` call (missing volume) and
+`MorningBriefProbe._missing_log_result`'s (missing log directory) now pass
+`path=` explicitly, so a caller can read the misconfigured path without
+parsing an exception message out of `source`. Required updating
+`scripts/generate_samples.py`'s redaction step, since the new `detail.path`
+leaked the generator's temp directory into `sample-outputs/board.json` —
+`test_the_generator_is_deterministic` caught it immediately.
+
+**"Never hardcoded" is now asserted, not just structurally true.**
+`tests/test_collector_config.py::test_a_probes_real_path_comes_from_config_never_a_hardcoded_literal`
+builds two probes from two never-before-seen paths and asserts each probe's
+path matches its own config exactly and differs from the other's — round-trip
+proof rather than an inference from `build_probes`'s existing coercion tests.
+
+**`docs/surfaces.md` is new**: the concrete counterpart to
+`docs/ARCHITECTURE.md`'s abstract "Surfaces (v1)" table — real path, real
+cadence, and what blindness means, per surface actually deployed
+(`cron:morning-brief`, `host:mac/disk`, `host:rig/disk`), plus a three-step
+"adding another surface" recipe.
+
+Files: `src/deadman/probes/{disk,morning_brief}.py`, `docs/surfaces.md`,
+`docs/ARCHITECTURE.md`, `infra/README.md`, `infra/collector/
+{collector.example.json,collector-rig.example.json,collectors.example.json}`,
+`scripts/generate_samples.py`, `sample-outputs/board.json`,
+`tests/fixtures/{README.md,real-morning-brief-fault.json}`,
+`tests/test_real_evidence_fixtures.py`, and updates to four existing
+collector test files.
+
+Gates: `pytest -n auto --dist=worksteal` 494/494 (up from 485); `ruff check .`
+and `ruff format --check .` clean; `bpsai-pair arch check --strict` clean.
+
+### Session: 2026-08-11 — DM2.4 done: absence no longer reads as health
+
+`src/deadman/verify/` is new: `expectations.py` (what each collector promised)
+and `collector_liveness.py` (whether it kept the promise). 73 new tests (485
+total, up from 412), all four gates clean.
+
+**Cadence is declared, and the module split is what enforces that.**
+`expectations.py` holds nothing but the declaration and never sees a store, so
+a deadline has literally nowhere to come from except configuration. The
+failure being refused: a collector that dies slowly — every 15 minutes, then
+hourly, then daily — teaches an inferring monitor to expect exactly the
+silence it is producing, and the board stays green the whole way down.
+`grace_intervals` defaults to 1.0, so silence is a fault at the cadence plus
+one whole missed run (30 minutes for the Mac's declared 900s).
+
+**Two clocks, because there are two questions.** Collector liveness is about
+*delivery* and is timed by `received_at`; surface freshness is about *reading*
+and is timed by `read_at`. Store-and-forward makes that real rather than
+pedantic: a collector that lost the network for a day and then drained its
+spool is alive — it just shipped — while every reading in that spool is a day
+old. The board now says both, which it can only do because DM2.2 recorded when
+we heard separately from when it was seen.
+
+**A stale surface reads `UNOBSERVABLE` whatever it last said, including
+FAULT.** Not a lost alarm: blindness is counted on its own line, the collector
+is faulting beside it, and the previous observation survives in
+`detail['last_observation']`. What is refused is asserting a current verdict
+from a reading too old to be one, in either direction.
+
+**The board gained four fields** (`collectors_declared`, `fresh_count`,
+`stale_count`, `unreported_count`, `undeclared_surfaces`) — additive, so the
+DM1 contract DM2.8 has to stay compatible with is intact. `fresh`/`stale`/
+`unreported` partition the declared surfaces, so "no faults" and "nothing
+reported" can no longer be the same number. `sample-outputs/board.json` was
+regenerated by script accordingly.
+
+**`scripts/mutation_check.py` is committed, and it is the AC.** Eleven guards,
+each inverted in the source one at a time, each required to break one named
+test; a mutation that survives exits non-zero as an unprotected guard. All 11
+are currently caught. The `DEADMAN_COLLECTORS` env var is documented in
+`infra/README.md` with `infra/collector/collectors.example.json` beside it —
+and a test cross-checks that example against `collector.example.json`, so a
+surface declared on one side but not swept on the other fails the suite.
+
+**Known limit, stated rather than hidden:** arrivals are searched through the
+newest 50 rows per surface by `read_at`, so a spool older than that many newer
+readings can have its delivery missed. That reads as silence — an alarm, never
+a false green.
+
+### Session: 2026-08-11 — DM2.3 done: the collector sweeps where the surfaces actually are
+
+`src/deadman/collector/` now holds the process that runs on Kevin's machines:
+`config.py`, `transport.py`, `spool.py`, `run.py`. 50 new tests (412 total, up
+from 362), all four gates clean.
+
+**Which probes run is a fact about a JSON file, never the collector's
+source.** `config.py`'s `PROBE_TYPES` maps a type name to the real dataclass
+(`DiskProbe`, `MorningBriefProbe`); `build_probes` constructs them, coercing
+string arguments to `Path` by reading the *target dataclass's own field
+annotations* rather than hand-coding which argument name means "this is a
+path" per probe. That is the one mechanism a probe registered later —
+DM2.5's job — needs nothing new here to use. `infra/collector/
+collector.example.json` is not just documentation: `test_collector_example_
+config.py` loads and builds real probes from it, so the README's own example
+can't drift from what the parser actually accepts.
+
+**Probe isolation cost nothing to add because it was not reimplemented.**
+The collector calls `deadman.probes.base.sweep()` directly — the same
+never-raise contract DM1 built — so "a raising probe doesn't blind the rest
+of the sweep" is inherited, not a second copy of that rule to keep in sync.
+
+**Store-and-forward has exactly two outcomes for a row: shipped, or still
+spooled.** `spool.py`'s `Spool` keeps nothing in process memory — every
+method reads or writes its directory directly, one file per failed batch,
+named so filename order is delivery order. That is what makes the restart
+AC free rather than engineered: a second `Spool` (or `Collector`) built with
+no reference to the one that failed sees exactly what was left on disk,
+because the directory *is* the state. A non-200 reply is spooled exactly
+like a connection failure — `transport.py`'s `TransportError` names only
+"never reached a server that could answer"; a service that answered and
+refused is a different fact, but both mean the batch is not yet delivered.
+
+**A resend is a fresh signature, not a replayed one — the subtle part.**
+DM2.2's freshness window is five minutes; a spool can sit far longer than
+that while a network is down. Reusing the original `signed_at` would make
+an honest retry look like a stale replay and fail on arrival, exactly
+backwards for a store-and-forward mechanism. So every send — first attempt
+or the Nth retry — builds a fresh `Batch` at the current clock reading and
+signs *that*, while each evidence row keeps its own original `read_at`
+untouched. `test_the_resent_batch_is_freshly_signed_not_replayed_stale`
+pins it with a clock that jumps 6 hours between the failed and the
+recovering send.
+
+**Dry run is real, not simulated.** `--dry-run` never calls
+`self.transport` at all — not "calls a mock", calls it *zero times* — so
+`test_dry_run_makes_zero_network_calls_under_the_real_transport` runs it
+with the actual `UrllibTransport` inside the suite's hermetic socket block
+from `conftest.py`. A pass means it structurally cannot have dialed out, not
+that a fake happened not to be called.
+
+**A malformed config fails loudly, naming the offending key**, at every
+layer: a missing top-level key, a bad `probes[i].type`, args that don't
+match the target constructor, `DEADMAN_INGEST_SECRET` unset — each raises
+naming the specific thing that's wrong, and the CLI (`main()`) catches these
+at startup and exits non-zero with the message on stderr rather than a
+traceback or a silent empty sweep.
+
+**`infra/launchd/com.deadman.collector.plist` + README, both executed, not
+just written.** The plist is a LaunchAgent (not a Daemon — no root needed to
+sweep files Kevin's own account can read), `StartInterval` not
+`StartCalendarInterval` (a sleeping laptop catches up on wake instead of
+skipping a day), and carries no secret — the shared ingest secret is sourced
+from `~/.deadman/collector-env.sh` at run time, unchecked-in, matching the
+rule DM2.2 already enforces on the service side
+(`TestNothingSecretIsCommitted`). Verified by hand this session: `plutil
+-lint` on the template and on a `sed`-materialized copy with real paths
+substituted (both `OK`), and the README's own `deadman-collector --dry-run`
+command run for real against the example config. `launchctl load` itself
+was not run — installing a live recurring background job on this machine is
+outside what this session should do unattended; that step is Kevin's to run
+by hand from a documented, executed command.
+
+Files: `src/deadman/collector/{__init__,config,transport,spool,run}.py`,
+`infra/launchd/com.deadman.collector.plist`, `infra/collector/
+collector.example.json`, `infra/README.md` ("The collector" section),
+`docs/ARCHITECTURE.md` ("The collector: where evidence actually gets
+produced"), `pyproject.toml` (`deadman-collector` console script), five new
+test files.
+
+Gates: `pytest -n auto --dist=worksteal` 412/412 (up from 362); `ruff check
+.` and `ruff format --check .` clean; `bpsai-pair arch check --strict`
+clean.
+
+### Session: 2026-08-11 — DM2.7 blocked: the alarm is real, the rail it sends over is not
+
+`src/deadman/remediate/transports.py` now holds everything DM1.11's
+`AlertChannel` was missing: `EmailTransport` (stdlib `smtplib` +
+`email.message`, no new dependency — STARTTLS, login, `send_message`, the
+same shape as `ops/lib/email_send.py`), `email_transport_from_env` (six
+`DEADMAN_ALERT_*` variables, refuses via `EmailTransportNotConfigured` if any
+are missing, no hardcoded credential defaults),
+`real_monitored_surfaces()` (reads `deadman.service.default_probes()`
+directly rather than a retyped literal — DM1.11's own test used a hand-typed
+tuple, and this is what replaces that with the real thing),
+`ThrottledAlertChannel` (documented 1h window, suppresses only a *repeat* of
+the same state, never a state change), and `record_transport_failures`
+(wraps `send` so a failure is appended to the DM2.1 store as `FAULT` on
+`alert:email` before re-raising — the raise stays, per `AlertChannel.alert`'s
+"a swallowed alert is silence" contract). 20 new tests in
+`tests/test_transports.py`, all passing first run; the two behavioral guards
+the ACs call out (state-change-always-delivered, failure-not-swallowed) were
+mutation-checked by hand (`PYTHONDONTWRITEBYTECODE=1`), each caught by a
+named test.
+
+**Found and fixed in passing, unrelated to this task's file scope:**
+`tests/test_ingest_startup.py`'s own secret-scanning test
+(`TestNothingSecretIsCommitted`, from DM2.2) tripped on its own docstring —
+the RST literal markup `` ``DEADMAN_INGEST_SECRET=`` `` in its prose was
+captured by the `git grep` regex as a "committed value" of `` `` `` because
+backtick wasn't excluded from the character class. Pre-existing on `HEAD`
+before this session touched anything (confirmed via `git show`, only one
+commit — DM2.2's own — has ever touched that file); fixed by excluding
+backtick from the captured value and treating a genuinely empty capture
+(nothing followed `=` before a delimiter) as inherently non-secret rather
+than a failure. `pytest -n auto --dist=worksteal` was reporting 341/342
+before this fix.
+
+**Blocked on one AC, not done: "one real message is confirmed received."**
+Checked whether a real send was possible before writing anything — this
+project's own rule, paid for once already by DM1.8's live-deploy blocker, is
+that a runbook nobody has executed is a hypothesis. `ops/.env`'s active SMTP
+block is labelled in its own comment `# DUMMY SMTP — for T87.2 testing only.
+Real sends will fail at connect`; the real values it would use in production
+sit commented out, never activated.
+`ops/monitoring/alertmanager/alertmanager.yml` independently confirms email
+delivery is still a `# In production, add:` TODO there, and ops carries its
+own standing backlog item for this
+(`backlog-sprint-T152-outbound-email-rail.md`). **The "existing ops email
+rail" this task was scoped against does not yet exist as a working,
+deliverable rail** — that is a fact about a sibling repo, not a defect in
+this one. No credential value was read into this session beyond confirming
+that comment and the two commented-out variable *names*; nothing was printed
+or logged.
+
+Every other AC is met and checked off in `.paircoder/tasks/DM2.7.task.md`,
+including the wiring AC (`real_monitored_surfaces()` sourced from the actual
+probe list) and `docs/alerting.md` (written with the blocked finding
+recorded plainly rather than a fabricated "confirmed received"). Gates:
+`pytest -n auto --dist=worksteal` 362/362, `ruff check .` and `ruff format
+--check .` clean, `bpsai-pair arch check --strict` clean.
+`bpsai-pair task update DM2.7 --status done` correctly refused on the one
+unchecked item; set to `blocked` rather than forced through.
+
+### Session: 2026-08-11 — DM2.2 done: authenticated ingest, and the arrival rule
+
+`src/deadman/ingest/` now holds `POST /evidence`, wired into `service.py`. 77
+new tests, 342 passing, all four gates clean.
+
+**The rule that made this task worth doing: arrival caps every method at
+`REPORTED`.** The service did not read the disk; a collector says it did.
+Recording that as `LOCAL_ARTIFACT` would have Cloud Run assert it inspected a
+disk it has no access to. The cap is a table (`ON_ARRIVAL`), total over
+`Method` by test, so a method added later must be graded deliberately rather
+than by a silent `dict.get` default.
+
+**What that costs is the point, and it is written down rather than routed
+around.** Every action floor in `remediate/registry.py` sits above the 0.4
+confidence ceiling `diagnose/grounding.py` puts on a `REPORTED` citation, so a
+diagnosis resting only on collected evidence escalates to a human instead of
+moving infrastructure. Since every real DM2 surface is remote, that disables
+automated remediation on collected evidence — which is the correct reading of
+what the service actually knows. The collector's claim survives in
+`detail.reported_method`: downgraded, not erased.
+
+**Idempotency forced a distinction the store could not have made.** DM2.1's
+`row_id` hashes the encoded row, and an arriving row must carry
+`detail.received_at` — our clock, distinct from the collector's `read_at`. So a
+re-sent batch hashes *differently* as a stored row and the store's own dedupe
+would not have caught it. Identity therefore belongs to the observation, not to
+our bookkeeping about it: `detail.wire_row_id` is computed before annotation
+and is what ingest compares. A test pins that keying on the stored row instead
+fails. One honest limit, named in the module: the replay lookback is 200 rows
+per surface, and a replay older than that stores a recognisable second copy
+(same `wire_row_id`, same `read_at`, later `received_at`) rather than a silent
+doubling of the trend.
+
+**Auth verifies the raw bytes before parsing anything**, so nothing
+unauthenticated is ever interpreted, and `signed_at` lives *inside* the signed
+payload — a timestamp in a header sits outside the MAC and the freshness check
+it feeds would be decorative. The window is bounded in both directions;
+one-sided lets a captured body be replayed forever by dating it forward. Note
+what freshness is not: it is not the replay defence for an honest collector
+retrying a spool it could not deliver. Refusing those would drop evidence
+exactly when the network is already unreliable.
+
+**`service.py` refuses to import without `DEADMAN_INGEST_SECRET`**, proven in a
+real subprocess with the variable stripped (DM1.11's discipline: "refuses to
+start" is a claim about a process). `tests/conftest.py` therefore sets a
+throwaway secret for the suite.
+
+**Ten mutations, ten named tests**, `PYTHONDONTWRITEBYTECODE=1` throughout —
+identity arrival mapping, endpoint storing without downgrading, signature check
+removed, freshness removed, dedupe keyed on the stored row, dedupe keyed on
+surface alone, body cap removed, missing secret defaulting to empty, unknown
+wire method coerced to the weakest tier, one-sided freshness window. Each broke
+a specific test. The endpoint suite passed 21/21 on its first run, which is
+precisely when this repo's own doctrine says to be suspicious.
+
+**Two things found by writing the docs rather than the code.** The `curl`
+runbook in `infra/README.md` was executed, not asserted (DM1.8's lesson): the
+exact body is verified to make `openssl dgst -hmac` and `auth.sign` agree, and
+to store with `method='reported'`. And the first draft of the
+"no secret is committed" test failed on its own documentation — a `git grep`
+for the variable name cannot distinguish a pasted token from a runbook telling
+an operator how to set one, so the rule now tests the *value*.
+
+**Deploy path closed, per DM2.1's handoff.** `Dockerfile` installs
+`.[firestore]` and `cloudbuild.yaml` sets `DEADMAN_STORE_BACKEND=firestore`
+with `--update-env-vars`, never `--set-env-vars`, which would replace the whole
+environment and wipe the ingest secret on every deploy. The memory backend
+stays the local default but now announces itself on stderr: a deploy that
+missed the variable would otherwise answer a collector `stored: 1` for evidence
+that dies at the next scale-to-zero, which is a false green nobody would find
+by looking at the board. **The deploy itself is unrun here** — no gcloud in
+this session, and it is DM2.6's privileged step. Firestore prerequisites
+(database creation, `roles/datastore.user`) are documented in
+`infra/README.md`.
+
+### Session: 2026-08-11 — DM2.1 done: the evidence store seam
+
+`src/deadman/store/` now holds the `EvidenceStore` Protocol and two backends
+behind it. 29 new tests, 265 passing, all four gates clean.
+
+**The Protocol is `append` / `latest` / `latest_per_surface` / `history`.**
+`history` is there for DM2.8 rather than for DM2.1, deliberately: this seam
+feeds four downstream tasks, and discovering in DM2.8 that held-duration needs
+a read the Protocol does not have would mean reopening the contract after
+three consumers depend on it. It is contract-tested now, so it is not
+speculative surface.
+
+**Absence stayed a state.** `latest()` on a surface with nothing stored
+returns `unobservable(...)` — never `None`, never a synthesised healthy row.
+Returning `None` would have pushed the judgement onto every caller, and one
+caller writing `if not evidence` would reinstate the false green the whole
+project argues against.
+
+**Replay safety fell out of content-addressed row identity.** `row_id()`
+hashes the encoded row, so an identical observation appended twice stores
+once, and a document backend writes with `set` instead of racing a
+read-modify-write. DM2.2's idempotent-batch AC gets this for free. Rows
+differing only in `read_at` are kept apart on purpose — collapsing those
+would erase the history DM2.8 computes held-duration from.
+
+**The Firestore backend is contract-tested, not merely written.** The suite is
+hermetic and the SDK is never installed, which would normally leave the
+deployed backend as the one nobody tests. Instead the backend takes an
+injected client and `tests/firestore_double.py` reproduces the narrow API
+slice it calls — including two behaviours that would otherwise surface only in
+production: Firestore document ids may not contain `/` (the surface
+`host:mac/disk` does, and the double caught the missing percent-encoding), and
+a collection query skips documents that exist only as subcollection parents.
+
+**Six mutations, six named tests.** Unencoded surface key, ascending Firestore
+ordering, memory ordered by arrival rather than `read_at`, absence synthesised
+as healthy, row identity by surface alone, dedup removed — each fails a
+specific test. A seventh check confirmed the AST seam guard fires on an
+injected module-scope `from google.cloud import firestore`, which is the half
+of the zero-dependency promise that must hold on a machine where the SDK *is*
+installed.
+
+**One thing left for whoever wires Firestore into the service:** the Dockerfile
+still installs `.` with no extras. Correct today — nothing constructs a
+`FirestoreEvidenceStore` — but DM2.2 or DM2.6 must change it to `.[firestore]`
+or the service fails closed at startup on the deploy rather than in CI.
+
+### Session: 2026-08-11 — DM2 planned (`/pc-plan DM2-make-it-real.md`)
+
+Materialized 9 task files under `.paircoder/tasks/` from
+`plans/backlogs/DM2-make-it-real.md`. Plan `plan-2026-08-dm2-make-it-real`
+already existed with all 9 ids registered in its phase; the task files were
+what was missing, and `bpsai-pair status` was reporting all 9 as not found.
+
+Each task file carries objective, files-to-update, an implementation plan
+anchored to the actual code it extends, the backlog's ACs, and verification
+commands. Added a **wiring AC** to seven of the nine — the backlog's ACs are
+strong on behavior but several would pass over a module that was written,
+unit-tested, and never called. Each names a call site, a configuration source
+with its default, and a failure mode.
+
+**Model assignments follow the backlog, not the calibration doctrine.**
+`calibration recommend-model` returns `claude-sonnet-5` for every complexity
+in this sprint (25–35) and `claude-opus-4-8` with `--cross-module`, both
+flagged `insufficient_samples`. The backlog assigns `claude-opus-5` to the
+four seam-defining tasks (DM2.1, DM2.2, DM2.4, DM2.9), which matches DM1's
+own convention — five of twelve DM1 task files carry `claude-opus-5`. The
+config's `models.providers.anthropic.models` list is stale relative to what
+the repo actually uses.
+
+PM provider is `none`, so this is local-only planning: no sync step.
+`bpsai-pair validate` passes; budget check per task ~20k tokens (2%), well
+under the 75% threshold.
 
 ### Session: 2026-08-11 — DM1.12 integration gate, sprint complete
 
@@ -692,8 +1218,117 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 - Gates run: `bpsai-pair validate` passed; `budget check` ok on every task
   (~2% of context each); `plan estimate` 297,750 tokens; `plan feasibility`
   REFUSED on DM1.1, DM1.2, DM1.5.
+- Planned DM2: 9 task files materialized from plans/backlogs/DM2-make-it-real.md into plan-2026-08-dm2-make-it-real
+
 
 ## What's Next
+
+**Now (DM2).** DM2.1, DM2.2, DM2.3, DM2.4 and DM2.5 are done. **DM2.6 and
+DM2.7 are both blocked**, and both for the same shape of reason: the code is
+done, tested and gate-clean, and what's missing is a human running a runbook
+against live external state this sandboxed environment cannot reach. See
+Blockers 4 and 5.
+
+**DM2.7** needs a real, working SMTP account to send through: `ops/.env`'s
+SMTP block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real
+sends will fail at connect`), and ops's own alertmanager and `T152` backlog
+item confirm email delivery isn't live there yet either. Either wait on
+ops's `T152` (outbound email rail) to land, or point `DEADMAN_ALERT_*` at any
+other working SMTP account and run the one-time verification script in
+`docs/alerting.md`'s last section.
+
+**DM2.6** needs a machine with `gcloud` authenticated for `deadman-20260810`
+— this environment has no `gcloud` CLI at all. `infra/scheduler.md` has the
+exact, reproducible commands: enable the Cloud Scheduler API, generate and
+set `DEADMAN_SCHEDULER_SECRET` on the live Cloud Run service, create the
+job, then trigger it once by hand and read the `self:sweep` row back through
+`FirestoreEvidenceStore` to prove it actually fired. **Do this before the
+next redeploy** — `deadman.service` now refuses to import without
+`DEADMAN_SCHEDULER_SECRET`, so a build that lands before the variable is set
+on the live service takes it down.
+
+DM2.8 depends on DM2.6, and DM2.6's code (the `service.py` changes, the
+store-backed self-check, the routing) is real and gate-green now even though
+the task itself is `blocked` on the two live-infra ACs above — whether
+`engage`'s dependency resolution treats a `blocked` upstream task as
+sufficient for DM2.8 to start, or waits for `done`, was not checked this
+session and should be confirmed before assuming DM2.8 can proceed.
+
+DM2.6 inherited one change from DM2.5 worth flagging: `infra/collector/
+collectors.example.json` now declares **two** collectors (`kevin-mac` and
+`kevin-rig`), not one — `DEADMAN_COLLECTORS` on the deployed service should
+keep pointing at that same file rather than special-casing the Mac. This
+session did not need to touch it.
+
+What DM2.6 inherits from DM2.4, and must not undo:
+
+- **`DEADMAN_COLLECTORS` has to be set on the deployed service**, or the
+  board it schedules will keep serving `collectors_declared: 0` — a board
+  that watches nobody's silence. The declaration lives at
+  `infra/collector/collectors.example.json`; `infra/README.md`'s "Collector
+  liveness" section has the `gcloud run services update` line. `cloudbuild.
+  yaml` sets `DEADMAN_STORE_BACKEND` the same way and is the obvious place
+  to add it.
+- **`interval_seconds` in that file must match `StartInterval` in
+  `infra/launchd/com.deadman.collector.plist`** (900 in both today). DM2.6
+  is the task that decides estate cadence deliberately; whichever number it
+  picks has to be changed in both files, and a collector reporting less often
+  than its declaration says will fault at cadence + one missed run.
+- **`build_app()` in `service.py` now constructs the store once** and hands
+  the same instance to ingest and to liveness. A scheduled endpoint that
+  builds its own store would report silence from a collector whose delivery
+  the service had just accepted.
+- **`scripts/mutation_check.py` must stay green** (`PYTHONDONTWRITEBYTECODE=1
+  python scripts/mutation_check.py`). It is not wired into pytest — it mutates
+  source files in place and restores them — so a refactor that moves a guarded
+  line reports `SKIP` and a non-zero exit rather than passing quietly.
+
+What DM2.5 inherits from DM2.3, and what DM2.3 actually built (superseding
+the DM2.2-session notes below, which described the plan rather than the
+result):
+
+- **The collector is `src/deadman/collector/{config,transport,spool,run}.py`,
+  done.** It signs with `deadman.ingest.wire.dumps` + `auth.sign` and posts
+  to `POST /evidence` with the `X-Deadman-Signature` header, exactly as
+  planned — but the freshness/spool interaction below was resolved
+  differently than the plan implied: a spooled batch is **not** re-signed
+  with its original `signed_at` before redelivery, because that would still
+  read as stale after any outage longer than 5 minutes. `Collector._send`
+  builds a **fresh `Batch`** — current clock, same evidence rows, same
+  `read_at` — on every attempt, first send or the Nth retry. That is the
+  actual mechanism DM2.6 (or any future caller) should reuse if it schedules
+  the collector rather than calling `run_once` directly.
+- **DM2.5's extension point is `PROBE_TYPES` in `collector/config.py`.**
+  Adding a real surface (Metricool, SMS relay) that needs an injected client
+  is not yet possible through a config file — only `DiskProbe` and
+  `MorningBriefProbe` are registered, because both take plain arguments a
+  JSON file can express. A probe needing a `SchedulerClient` or
+  `RelayClient` needs either a registry entry that knows how to construct
+  the client from config (e.g. an API key field), or a documented decision
+  that those probes are wired by code, not by this collector's config file.
+  Decide this explicitly in DM2.5 rather than discovering it mid-task.
+- **DM2.4** reads `detail.collector_id` and `detail.received_at` off stored
+  rows. `received_at` is the field that makes "this collector has gone quiet"
+  answerable; `read_at` cannot, because it is the collector's own clock on an
+  observation that may have been spooled. Note every ingested row is
+  `Method.REPORTED` regardless of what the collector claimed — check
+  `detail.reported_method` if the collector's own grade matters.
+- **DM2.7** records transport failures through the same store. It is
+  `blocked` on one AC — see Blockers.
+- **Correction to the note left under DM2.1:** idempotent replay was *not*
+  free from content-addressed `row_id`. An arriving row must carry an arrival
+  time, which changes the hash on every delivery, so the store's dedupe would
+  not have fired. Ingest dedupes on `detail.wire_row_id` instead — the row's
+  identity computed *before* annotation.
+- **Done, was DM2.1's handoff:** the Dockerfile installs `.[firestore]` and
+  `cloudbuild.yaml` sets `DEADMAN_STORE_BACKEND=firestore`. **DM2.6 must
+  verify on the first real deploy** that the Firestore database exists and the
+  Cloud Run service account holds `roles/datastore.user`, and that
+  `DEADMAN_INGEST_SECRET` is set on the service — all three are startup
+  failures by design, so the deploy will fail loudly rather than serve wrong.
+  See `infra/README.md`.
+
+Items below are DM1-era and carried forward.
 
 1. **DONE — both GCP items landed.** The deploy is live at
    https://deadman-mrapac5nda-uc.a.run.app and the live Gemini call has run
@@ -732,6 +1367,9 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
    filesystem); and the live demo must run unedited per the rules, so the
    break-and-heal sequence needs rehearsing end to end against the deployed
    URL, not locally.
+1. Start DM2.4 — collector liveness (absence must not read as health); DM2.5
+   (real surfaces) is next after that, now that DM2.3 has unblocked it.
+
 
 ## Blockers
 
@@ -772,6 +1410,59 @@ bpsai-pair plan feasibility plan-2026-08-dm1-deadman-v1 --override "<reason>"
 **3. Sprint is 345 Cx against a 300 Cx budget (~15% over).** Per the planning
 skill's scope rule this is Epic-shaped; the plan record is currently a Story.
 Either accept the overrun, cut from the list above, or re-scope to an Epic.
+
+**4. DM2.7's "one real message is confirmed received" AC — needs a real SMTP
+account, not more code.** Every other piece of DM2.7 is done: `EmailTransport`,
+`email_transport_from_env`, `real_monitored_surfaces()`, `ThrottledAlertChannel`,
+`record_transport_failures`, all tested and mutation-checked, `docs/alerting.md`
+written. This is the one AC blocked on external state — `ops/.env`'s active
+SMTP block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real
+sends will fail at connect`), and `ops/monitoring/alertmanager/alertmanager.yml`
+independently confirms real email delivery isn't live there either (every
+receiver is a `localhost` webhook, `# In production, add: Email` still a TODO).
+ops carries its own backlog item for this
+(`backlog-sprint-T152-outbound-email-rail.md`).
+
+**Not overridden — needs one of two decisions:** wait for `T152` to land a
+real ops SMTP account, or point `DEADMAN_ALERT_*` at any other working
+account (e.g. a personal Gmail app password) in the meantime. Either way, the
+verification is the one-time script at the end of `docs/alerting.md` — run
+it, confirm the message lands, check the AC box, then `bpsai-pair task update
+DM2.7 --status done` should pass immediately since nothing else is
+outstanding.
+
+**5. DM2.6's two live-infra ACs — needs a machine with `gcloud`, not more
+code.** Every code AC is done: `POST /self-check` (`src/deadman/scheduled/`),
+bearer-token auth mandatory at import (mirrors `DEADMAN_INGEST_SECRET`),
+self-check evidence written through the DM2.1 store via
+`StoreSelfEvidenceLog` (`src/deadman/self_check.py`), a test proving a second,
+independently-built app instance reads what the first wrote (cold-start
+survival), and the collector-vs-Cloud-Scheduler independence documented in
+`infra/scheduler.md`. `pytest` 528/528, `ruff` clean both ways, `arch check
+--strict` clean.
+
+The two ACs this session could not close: **enabling the Cloud Scheduler API
+and creating the job**, and **verifying the job fired at least once via a
+stored row**. This sandboxed worktree has no `gcloud` CLI at all (`gcloud`:
+command not found) and no Application Default Credentials
+(`~/.config/gcloud` does not exist) — the same class of gap DM1.8's original
+deploy blocker named ("a runbook nobody has executed is a hypothesis"), this
+time because the tool itself is absent rather than the credential. Both ACs
+have exact, reproducible commands written in `infra/scheduler.md` (API
+enable, secret generation and `--update-env-vars`, `gcloud scheduler jobs
+create http`, then `gcloud scheduler jobs run` plus a `FirestoreEvidenceStore`
+read-back of the `self:sweep` surface to prove the row landed).
+
+**Not overridden — needs one of two decisions:** run `infra/scheduler.md`'s
+commands from a machine with `gcloud` authenticated for `deadman-20260810`
+(the rig, per DM1.8's precedent — that deploy also had to run from the rig
+because this environment lacked the tooling), or grant this environment
+`gcloud` + ADC access. **One deploy-ordering hazard to act on before either
+happens:** `deadman.service` now refuses to import without
+`DEADMAN_SCHEDULER_SECRET` set, so the *next* `gcloud builds submit` must not
+land until that variable is set on the live Cloud Run service via
+`infra/scheduler.md`'s step 1 — merging this branch and redeploying before
+setting it would take the currently-live service down entirely.
 <!-- paircoder:state:end -->
 ## Quick Commands
 

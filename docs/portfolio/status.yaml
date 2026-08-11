@@ -1,9 +1,16 @@
 version: 1
-updated_at: '2026-08-11T02:33:29.315281+00:00'
+updated_at: '2026-08-11T21:03:31.354513+00:00'
 last_transition:
-  event: task_done
-  at: '2026-08-11T02:33:29.315281+00:00'
-  task_id: DM1.7
+  event: task_blocked
+  at: '2026-08-11T21:03:31.354513+00:00'
+  task_id: DM2.6
+  reason: "\u274C Cannot complete: 2 acceptance criteria item(s) unchecked\n\nUnchecked\
+    \ items:\n  \u25CB Cloud Scheduler API enabled on `deadman-20260810` and a job\
+    \ created, with \nthe exact reproducible commands recorded in `infra/scheduler.md`\
+    \ \u2014 **BLOCKED, \nnot done**: `infra/scheduler.md` written with exact, reproducible\
+    \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
+    \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`: command\
+    \ not found;\n`~/.config/gcloud` absent), so"
 transitions:
 - event: dispatch
   at: '2026-08-11T00:55:41.784992+00:00'
@@ -69,6 +76,62 @@ transitions:
 - event: task_done
   at: '2026-08-11T02:33:29.315281+00:00'
   task_id: DM1.7
+- event: dispatch
+  at: '2026-08-11T19:15:27.761518+00:00'
+  task_id: DM2.1
+- event: task_done
+  at: '2026-08-11T19:25:49.406224+00:00'
+  task_id: DM2.1
+- event: dispatch
+  at: '2026-08-11T19:25:52.351142+00:00'
+  task_id: DM2.2
+- event: task_done
+  at: '2026-08-11T19:46:04.930450+00:00'
+  task_id: DM2.2
+- event: dispatch
+  at: '2026-08-11T19:46:06.338807+00:00'
+  task_id: DM2.7
+- event: task_blocked
+  at: '2026-08-11T20:01:18.850575+00:00'
+  task_id: DM2.7
+  reason: "\u274C Cannot complete: 1 acceptance criteria item(s) unchecked\n\nUnchecked\
+    \ items:\n  \u25CB An email transport delivers through the existing ops email\
+    \ rail and one real\nmessage is confirmed received \u2014 **BLOCKED, see Evidence.**\
+    \ \n`EmailTransport`/`email_transport_from_env` are written and tested against\
+    \ the \nexact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own \n`SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM`\
+    \ in `.env` are labelled in-repo as `# \nDUMMY SMTP \u2014 for T87.2 testing only.\
+    \ Real sends will fail"
+- event: dispatch
+  at: '2026-08-11T20:01:19.086574+00:00'
+  task_id: DM2.3
+- event: task_done
+  at: '2026-08-11T20:15:25.200289+00:00'
+  task_id: DM2.3
+- event: dispatch
+  at: '2026-08-11T20:15:25.975647+00:00'
+  task_id: DM2.4
+- event: task_done
+  at: '2026-08-11T20:33:10.040932+00:00'
+  task_id: DM2.4
+- event: dispatch
+  at: '2026-08-11T20:33:10.833562+00:00'
+  task_id: DM2.5
+- event: task_done
+  at: '2026-08-11T20:43:06.654355+00:00'
+  task_id: DM2.5
+- event: dispatch
+  at: '2026-08-11T20:43:06.904574+00:00'
+  task_id: DM2.6
+- event: task_blocked
+  at: '2026-08-11T21:03:31.354513+00:00'
+  task_id: DM2.6
+  reason: "\u274C Cannot complete: 2 acceptance criteria item(s) unchecked\n\nUnchecked\
+    \ items:\n  \u25CB Cloud Scheduler API enabled on `deadman-20260810` and a job\
+    \ created, with \nthe exact reproducible commands recorded in `infra/scheduler.md`\
+    \ \u2014 **BLOCKED, \nnot done**: `infra/scheduler.md` written with exact, reproducible\
+    \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
+    \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`: command\
+    \ not found;\n`~/.config/gcloud` absent), so"
 tasks:
   DM1.1:
     status: dispatched
@@ -107,3 +170,38 @@ tasks:
   DM1.7:
     status: done
     updated_at: '2026-08-11T02:33:29.315281+00:00'
+  DM2.1:
+    status: done
+    updated_at: '2026-08-11T19:25:49.406224+00:00'
+  DM2.2:
+    status: done
+    updated_at: '2026-08-11T19:46:04.930450+00:00'
+  DM2.7:
+    status: blocked
+    updated_at: '2026-08-11T20:01:18.850575+00:00'
+    reason: "\u274C Cannot complete: 1 acceptance criteria item(s) unchecked\n\nUnchecked\
+      \ items:\n  \u25CB An email transport delivers through the existing ops email\
+      \ rail and one real\nmessage is confirmed received \u2014 **BLOCKED, see Evidence.**\
+      \ \n`EmailTransport`/`email_transport_from_env` are written and tested against\
+      \ the \nexact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own \n\
+      `SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM` in `.env` are labelled in-repo as `#\
+      \ \nDUMMY SMTP \u2014 for T87.2 testing only. Real sends will fail"
+  DM2.3:
+    status: done
+    updated_at: '2026-08-11T20:15:25.200289+00:00'
+  DM2.4:
+    status: done
+    updated_at: '2026-08-11T20:33:10.040932+00:00'
+  DM2.5:
+    status: done
+    updated_at: '2026-08-11T20:43:06.654355+00:00'
+  DM2.6:
+    status: blocked
+    updated_at: '2026-08-11T21:03:31.354513+00:00'
+    reason: "\u274C Cannot complete: 2 acceptance criteria item(s) unchecked\n\nUnchecked\
+      \ items:\n  \u25CB Cloud Scheduler API enabled on `deadman-20260810` and a job\
+      \ created, with \nthe exact reproducible commands recorded in `infra/scheduler.md`\
+      \ \u2014 **BLOCKED, \nnot done**: `infra/scheduler.md` written with exact, reproducible\
+      \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
+      \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`:\
+      \ command not found;\n`~/.config/gcloud` absent), so"

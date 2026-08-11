@@ -17,6 +17,12 @@ so ``observe()`` appends the current reading to a history file and then
 reasons over the series. That is a side effect inside a probe, done knowingly:
 you cannot measure a rate from a single sample, and refusing to accumulate
 would mean refusing to answer the only question that matters.
+
+**One machine's disk says nothing about another's.** ``host`` exists so the
+same probe, pointed at two different machines' volumes, produces two
+surface ids that cannot collide even when both mount their primary volume
+at ``/`` — see ``host:mac/disk`` and ``host:rig/disk`` in
+``docs/surfaces.md``. Blank preserves the original single-machine id.
 """
 
 from __future__ import annotations
@@ -46,13 +52,23 @@ DEFAULT_WINDOW_DAYS = 21.0
 class DiskProbe:
     volume: Path = Path("/")
     history_path: Path = Path("disk-history.jsonl")
+    #: Which machine this volume lives on, e.g. ``"mac"`` or ``"rig"``. Blank
+    #: preserves the original single-machine id. A full Mac disk says
+    #: nothing about the rig's, so the two need surface ids that cannot
+    #: collide even when both mount their primary volume at ``/`` — that is
+    #: the entire reason this field exists rather than reusing ``volume``.
+    host: str = ""
     floor_bytes: int = DEFAULT_FLOOR_BYTES
     runway_days: float = DEFAULT_RUNWAY_DAYS
     window_days: float = DEFAULT_WINDOW_DAYS
 
     @property
     def surface(self) -> str:
-        return f"host:disk{self.volume}"
+        if not self.host:
+            return f"host:disk{self.volume}"
+        volume_str = str(self.volume)
+        suffix = "" if volume_str == "/" else volume_str
+        return f"host:{self.host}/disk{suffix}"
 
     @property
     def question(self) -> str:
@@ -66,7 +82,9 @@ class DiskProbe:
         try:
             usage = shutil.disk_usage(self.volume)
         except OSError as exc:
-            return unobservable(self.surface, src, f"cannot stat volume: {exc}")
+            return unobservable(
+                self.surface, src, f"cannot stat volume: {exc}", path=str(self.volume)
+            )
 
         now = datetime.now(timezone.utc)
         free = usage.free

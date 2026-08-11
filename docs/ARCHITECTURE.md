@@ -177,9 +177,106 @@ surfaces no edge was found between and stating what inference costs: it can be
 wrong in ways a declared dependency edge cannot. `Basis.TRAVERSED` exists in
 the enum and nothing in this repo can produce one; a test pins that.
 
+## What crossing a wire does to a claim
+
+The surfaces are not where the service is. Cloud Run cannot read a log on a
+Mac, so a collector runs where the surfaces live and posts signed batches to
+`POST /evidence` (`src/deadman/ingest/`). That topology has a consequence the
+HTTP hides: **every observation the hosted service holds is a report of an
+observation, not an observation.**
+
+So arrival caps the method of every incoming row at `REPORTED`, the weakest
+tier on the ladder. The collector's claimed method is preserved in
+`detail.reported_method` rather than erased — downgraded, not discarded — but
+nothing automated may read a relayed claim as more than a claim. Recording a
+collector's file read as the service's own would have the service assert it
+inspected a disk it has no access to: a heartbeat wearing a hat, which is the
+exact construction `Method.REPORTED` was named to catch.
+
+**What that costs is the point, not a bug to route around.** Every action
+floor in `remediate/registry.py` sits above the 0.4 confidence ceiling
+`diagnose/grounding.py` imposes on a `REPORTED` citation, so a diagnosis
+resting only on collected evidence escalates to a human instead of moving
+infrastructure. An agent that restarts a service on an unverified relayed
+assertion is how automated remediation turns an outage into two.
+
+Three more facts about a stored remote row, each a field rather than a
+convention:
+
+- `read_at` stays the collector's reading time and `detail.received_at` is
+  ours. Collapsing them would date a spool delivered after an outage as a
+  burst of readings taken *during* it.
+- `detail.collector_id` names who said it — which DM2.4 needs, because on a
+  wire an empty inbox and a healthy estate look identical, and telling them
+  apart requires knowing who was expected to speak.
+- `detail.wire_row_id` is the identity of the observation, computed before
+  arrival is annotated. A collector that could not deliver re-sends, and it
+  must be able to; deduplicating on the *stored* row would fail, because the
+  stored row carries an arrival time that differs on the second delivery.
+  Idempotency keyed on our own bookkeeping is not idempotency.
+
+Auth fails closed at startup: no `DEADMAN_INGEST_SECRET`, no service. The
+alternative failure is quiet — an endpoint accepting unsigned batches produces
+a board that looks like a monitored estate and is a guestbook.
+
+## The collector: where evidence actually gets produced
+
+`src/deadman/collector/` is the other end of the wire the previous section
+describes — the process that runs on Kevin's machines, sweeps whatever
+probes a config file names, and ships a signed batch to `POST /evidence`.
+
+**Which probes run is a fact about a file, not the collector's source.**
+`collector/config.py` reads a JSON config naming probe types and their
+arguments; `PROBE_TYPES` maps a type name to the real dataclass it
+constructs, and argument coercion (string → `Path`) is read off the target
+dataclass's own field annotations rather than hand-coded per probe. Adding a
+surface on a new machine — a different disk, a different brief log — is a
+new config file. A malformed one fails at startup naming the exact key that
+is wrong, never a collector that starts and silently sweeps nothing.
+
+**Probe isolation is inherited, not reimplemented.** The collector calls
+`deadman.probes.base.sweep()` — the same never-raise contract detection
+already relies on — so a probe that raises does not prevent the rest of the
+sweep's evidence from shipping. There is no second version of that rule to
+keep in sync with the first.
+
+**Store-and-forward means exactly two outcomes for a row: shipped, or still
+spooled.** A batch the transport could not deliver — unreachable, or a
+non-200 reply — is written to a spool directory rather than discarded, and
+a later run drains it, oldest first, before attempting its own fresh sweep.
+Nothing about the spool lives in process memory: a `Spool` reconstructed
+over the same directory after a crash sees exactly what the prior process
+left behind, because the directory *is* the state.
+
+**A resend is signed fresh, never replayed.** `deadman.ingest.auth` bounds
+`signed_at` to a five-minute freshness window, and a spooled batch can sit
+far longer than that while a network is down. Reusing the original
+signature would make an honest retry look like a stale replay and fail the
+exact check it should pass. So every send — first attempt or the tenth
+retry — builds a new `Batch` at the current clock reading and signs that;
+only `signed_at` changes, never the evidence rows' own `read_at`.
+
+**Dry run proves this before it ships anything real.** `--dry-run` sweeps
+and prints the batch that would be sent, and never calls the transport at
+all — not "calls it against a mock", calls it *zero times* — which is what
+lets a test assert the property under the suite's real hermetic socket
+block instead of only against a fake.
+
+**Two machines, same probe, distinct ids.** `host:mac/disk` and
+`host:rig/disk` are both `DiskProbe`, differing only in a `host` config
+argument, because a full volume on one machine says nothing about the
+other and a shared surface id would let one machine's healthy report paper
+over the other's fault. See `docs/surfaces.md` for the real path, cadence
+and blindness meaning of every surface actually deployed, as opposed to the
+abstract "Surfaces (v1)" table above.
+
 ## Deployment
 
 Brain in **Cloud Run**. Collectors on each host push evidence outward. Actions
 dispatched back. A monitor must not share fate with what it monitors.
 
-Built with **Cloud Build**, so no local Docker daemon is required.
+Built with **Cloud Build**, so no local Docker daemon is required. The image
+installs `.[firestore]`, because ingested evidence goes to a store that
+outlives the instance — a memory-backed deploy would forget the estate on
+every scale-to-zero, and forgetting is indistinguishable from never having
+been told.

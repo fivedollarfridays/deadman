@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template, not a ready-to-load file: __DEADMAN_COLLECTOR_BIN__ and
+  __DEADMAN_COLLECTOR_CONFIG__ below are placeholders a real install
+  substitutes with real paths. See infra/README.md, "Installing the
+  collector on a Mac", for the one command that does the substitution and
+  the install together. Neither placeholder is a secret — the shared
+  ingest secret is never written into this file; it is sourced from
+  ~/.deadman/collector-env.sh at run time (see the README), which is not
+  committed, matching the rule already enforced for the service side in
+  tests/test_ingest_startup.py::TestNothingSecretIsCommitted.
+
+  StartInterval, not StartCalendarInterval: this needs "every N seconds
+  while the machine is up", not a specific wall-clock time, and a laptop
+  asleep at a scheduled minute would otherwise skip a run entirely until
+  the next one. launchd runs a missed StartInterval as soon as the machine
+  wakes instead. 900s (15 minutes) is a starting cadence — DM2.6 is where
+  sweep cadence across the whole estate gets decided deliberately; this
+  file is what DM2.6 edits, not a second scheduler to reconcile with it.
+
+  A LaunchAgent, not a LaunchDaemon: this runs as Kevin, sweeping surfaces
+  only Kevin's account can read (a send log under his home directory), and
+  needs no root privilege to do it.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.deadman.collector</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>source ~/.deadman/collector-env.sh &amp;&amp; exec __DEADMAN_COLLECTOR_BIN__ --config __DEADMAN_COLLECTOR_CONFIG__</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/deadman/collector.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/deadman/collector.log</string>
+</dict>
+</plist>

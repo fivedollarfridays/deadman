@@ -22,10 +22,13 @@
       "observation": "unobservable",
       "method": "reported",
       "summary": "cannot observe cron:morning-brief: log directory does not exist (path misconfigured?)",
-      "source": "<work>/absent/morning-brief.jsonl",
+      "source": "morning-brief.jsonl",
       "read_at": "2026-08-11T06:00:00+00:00",
       "detail": {
-        "reason": "log directory does not exist (path misconfigured?)"
+        "reason": "log directory does not exist (path misconfigured?)",
+        "withheld": [
+          "path"
+        ]
       }
     }
   ],
@@ -34,5 +37,10 @@
   ],
   "healthy_count": 1,
   "fault_count": 0,
-  "blind_count": 1
+  "blind_count": 1,
+  "collectors_declared": 0,
+  "fresh_count": 0,
+  "stale_count": 0,
+  "unreported_count": 0,
+  "undeclared_surfaces": []
 }

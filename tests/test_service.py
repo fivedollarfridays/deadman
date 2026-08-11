@@ -7,10 +7,26 @@ would call it, but with nothing bound to a port.
 
 from __future__ import annotations
 
+import io
 import json
+from datetime import datetime, timezone
+
+import pytest
+from conftest import TEST_INGEST_SECRET
 
 from deadman.evidence.model import Evidence, Method, Observation
-from deadman.service import build_board, make_app
+from deadman.ingest.auth import SIGNATURE_ENVIRON_KEY, sign
+from deadman.ingest.endpoint import EVIDENCE_PATH, IngestEndpoint
+from deadman.ingest.wire import Batch, dumps
+from deadman.service import (
+    STORE_BACKEND_ENV,
+    StoreMisconfigured,
+    build_board,
+    default_store,
+    make_app,
+)
+from deadman.store.firestore import StoreSdkMissing
+from deadman.store.memory import InMemoryEvidenceStore
 
 
 def _evidence(surface: str, observation: Observation, **detail: object) -> Evidence:
@@ -48,16 +64,30 @@ class _RaisingProbe:
         raise RuntimeError("boom")
 
 
-def _call(app, path: str = "/", method: str = "GET"):
+def _call(app, path: str = "/", method: str = "GET", body: bytes | None = None, **extra: object):
     captured: dict[str, object] = {}
 
     def start_response(status: str, headers: list[tuple[str, str]]) -> None:
         captured["status"] = status
         captured["headers"] = headers
 
-    environ = {"PATH_INFO": path, "REQUEST_METHOD": method}
-    body = b"".join(app(environ, start_response))
-    return captured["status"], captured["headers"], body
+    environ: dict[str, object] = {"PATH_INFO": path, "REQUEST_METHOD": method}
+    if body is not None:
+        environ["CONTENT_LENGTH"] = str(len(body))
+        environ["wsgi.input"] = io.BytesIO(body)
+    environ.update(extra)
+    payload = b"".join(app(environ, start_response))
+    return captured["status"], captured["headers"], payload
+
+
+def _signed_batch(secret: bytes) -> tuple[bytes, str]:
+    batch = Batch(
+        collector_id="mac-studio",
+        signed_at=datetime.now(timezone.utc),
+        rows=(_evidence("host:mac/disk", Observation.FAULT),),
+    )
+    body = dumps(batch)
+    return body, sign(body, secret)
 
 
 class TestBuildBoard:
@@ -86,6 +116,13 @@ class TestBuildBoard:
         assert "host:broken" in board["blind_spots"]
 
     def test_empty_probe_list_yields_an_empty_but_valid_board(self):
+        """Exact, not a subset: a key appearing on the board without a test
+        noticing is how a summary field drifts away from what it claims.
+
+        ``collectors_declared: 0`` is the honest reading of a board built with
+        no liveness — nobody's silence is being watched — rather than a row of
+        zeroes that looks like an estate with nothing wrong.
+        """
         board = build_board([])
 
         assert board == {
@@ -94,6 +131,11 @@ class TestBuildBoard:
             "healthy_count": 0,
             "fault_count": 0,
             "blind_count": 0,
+            "collectors_declared": 0,
+            "fresh_count": 0,
+            "stale_count": 0,
+            "unreported_count": 0,
+            "undeclared_surfaces": [],
         }
 
     def test_evidence_rows_are_json_serializable(self):
@@ -148,3 +190,165 @@ class TestApp:
         assert status == "200 OK"
         payload = json.loads(body)
         assert "surfaces" in payload
+
+
+class TestIngestRouting:
+    """``POST /evidence`` is wired into the app a server actually serves.
+
+    The gap these close: every ingest unit test can be green while nothing
+    routes to the endpoint, which would ship a service that answers 405 to
+    every collector in the estate and a board that never changes.
+    """
+
+    def _app(self, store: InMemoryEvidenceStore, secret: bytes = b"s3cret"):
+        return make_app(lambda: [], ingest=IngestEndpoint(store=store, secret=secret))
+
+    def test_a_signed_batch_posted_to_evidence_is_stored(self):
+        store = InMemoryEvidenceStore()
+        body, signature = _signed_batch(b"s3cret")
+
+        status, headers, response = _call(
+            self._app(store),
+            EVIDENCE_PATH,
+            method="POST",
+            body=body,
+            **{SIGNATURE_ENVIRON_KEY: signature},
+        )
+
+        assert status == "200 OK"
+        assert dict(headers)["Content-Type"] == "application/json"
+        assert json.loads(response)["stored"] == 1
+        assert store.latest("host:mac/disk").observation is Observation.FAULT
+
+    def test_an_unsigned_post_to_evidence_is_401_from_the_app(self):
+        store = InMemoryEvidenceStore()
+        body, _signature = _signed_batch(b"s3cret")
+
+        status, _headers, _response = _call(self._app(store), EVIDENCE_PATH, "POST", body=body)
+
+        assert status.startswith("401")
+        assert store.latest_per_surface() == {}
+
+    def test_getting_the_evidence_path_is_405_not_a_board(self):
+        status, _headers, _body = _call(self._app(InMemoryEvidenceStore()), EVIDENCE_PATH)
+
+        assert status == "405 Method Not Allowed"
+
+    def test_posting_to_the_board_path_is_still_405(self):
+        status, _headers, _body = _call(self._app(InMemoryEvidenceStore()), "/", method="POST")
+
+        assert status == "405 Method Not Allowed"
+
+    def test_an_app_built_without_ingest_refuses_the_path_rather_than_crashing(self):
+        status, _headers, _body = _call(make_app(lambda: []), EVIDENCE_PATH, "POST", body=b"{}")
+
+        assert status == "405 Method Not Allowed"
+
+    def test_ingest_does_not_forge_liveness_for_a_service_that_never_swept(self):
+        """A delivered batch is not a sweep.
+
+        DM1.11's rule, one endpoint over: self-evidence is recorded when the
+        board is served, because that is when probes ran. Recording it here
+        would let a chatty collector keep a blind service looking alive.
+        """
+        recorded: list[tuple[int, int]] = []
+
+        class _Log:
+            def record(self, sweep_size: int, blind: int) -> None:
+                recorded.append((sweep_size, blind))
+
+        store = InMemoryEvidenceStore()
+        app = make_app(
+            lambda: [],
+            self_log=_Log(),
+            ingest=IngestEndpoint(store=store, secret=b"s3cret"),
+        )
+        body, signature = _signed_batch(b"s3cret")
+
+        _call(app, EVIDENCE_PATH, "POST", body=body, **{SIGNATURE_ENVIRON_KEY: signature})
+
+        assert recorded == []
+
+        _call(app, "/")
+
+        assert recorded == [(0, 0)]
+
+
+class TestDefaultStore:
+    """Which backend ingested evidence lands in, and whether that is loud.
+
+    The forgetful backend is the right default for a local run and a false
+    green on Cloud Run: instances are ephemeral, so a memory-backed deploy
+    answers ``stored: 1`` to a collector whose spool will not survive the next
+    scale-to-zero. That is the exact shape of lie this project is about, so it
+    does not get to happen quietly.
+    """
+
+    def test_the_default_is_memory_and_it_says_so_on_stderr(self, monkeypatch, capsys):
+        monkeypatch.delenv(STORE_BACKEND_ENV, raising=False)
+
+        store = default_store()
+
+        assert isinstance(store, InMemoryEvidenceStore)
+        assert STORE_BACKEND_ENV in capsys.readouterr().err
+
+    def test_an_explicit_memory_backend_is_still_announced(self, monkeypatch, capsys):
+        monkeypatch.setenv(STORE_BACKEND_ENV, "memory")
+
+        default_store()
+
+        assert "forget" in capsys.readouterr().err
+
+    def test_an_unknown_backend_is_a_startup_failure_not_a_fallback(self, monkeypatch):
+        monkeypatch.setenv(STORE_BACKEND_ENV, "postgres")
+
+        with pytest.raises(StoreMisconfigured) as caught:
+            default_store()
+
+        assert "postgres" in str(caught.value)
+
+    def test_choosing_firestore_reaches_for_the_sdk_rather_than_degrading(self, monkeypatch):
+        """The SDK is not installed in this suite, by design (pyproject.toml).
+
+        A backend that fell back to memory here would turn a missing
+        dependency into silent data loss on the deploy.
+        """
+        monkeypatch.setenv(STORE_BACKEND_ENV, "firestore")
+
+        with pytest.raises(StoreSdkMissing):
+            default_store()
+
+
+class TestDeployedWiring:
+    """The module-level ``app`` — the one Cloud Run runs — has ingest on it."""
+
+    def test_the_default_app_accepts_a_batch_signed_with_the_configured_secret(self):
+        from deadman.service import app as default_app
+
+        body, signature = _signed_batch(TEST_INGEST_SECRET.encode())
+
+        status, _headers, response = _call(
+            default_app,
+            EVIDENCE_PATH,
+            method="POST",
+            body=body,
+            **{SIGNATURE_ENVIRON_KEY: signature},
+        )
+
+        assert status == "200 OK"
+        assert json.loads(response)["stored"] == 1
+
+    def test_the_default_app_refuses_a_batch_signed_with_anything_else(self):
+        from deadman.service import app as default_app
+
+        body, signature = _signed_batch(b"not-the-configured-secret")
+
+        status, _headers, _response = _call(
+            default_app,
+            EVIDENCE_PATH,
+            method="POST",
+            body=body,
+            **{SIGNATURE_ENVIRON_KEY: signature},
+        )
+
+        assert status.startswith("401")

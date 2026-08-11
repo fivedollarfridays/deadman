@@ -1,0 +1,19 @@
+{
+  "captured": true,
+  "captured_at": "2026-08-11T20:39:27.797652+00:00",
+  "note": "The real, current fault this sprint exists to catch: MorningBriefProbe run directly against ~/ops/data/brief-send-log.jsonl on the Mac this was captured on, no synthetic data involved. The morning brief job last delivered on 2026-08-04; by the time this was captured it had been silent for days, undetected, because the brief is itself the alerting channel. See docs/surfaces.md and DM2.9's case study.",
+  "evidence": {
+    "surface": "cron:morning-brief",
+    "observation": "fault",
+    "method": "local_artifact",
+    "summary": "no brief sent in 176.7h (window 30h, ~7 missed)",
+    "source": "/Users/kevinmasterson/ops/data/brief-send-log.jsonl",
+    "read_at": "2026-08-11T20:39:27.797652+00:00",
+    "detail": {
+      "last_send_at": "2026-08-04T11:56:45.586032+00:00",
+      "age_hours": 176.71,
+      "window_hours": 30.0,
+      "row_count": 1
+    }
+  }
+}
