@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0,<10",
+    "pytest-xdist>=3.6,<4",
     "ruff>=0.6,<1",
 ]
 # Deliberately NOT part of `dev`. The diagnosis tests replay recordings from

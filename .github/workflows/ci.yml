@@ -21,7 +21,7 @@ jobs:
           pip install -e ".[dev]" -c constraints.txt
 
       - name: pytest
-        run: pytest -q
+        run: pytest -n auto --dist=worksteal -q
 
       - name: ruff check
         run: ruff check .
