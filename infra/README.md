@@ -157,6 +157,7 @@ for.
 | `DEADMAN_INGEST_SECRET` | **none — the service refuses to start** | Shared secret a collector signs its batches with. See "Ingest" below. |
 | `DEADMAN_STORE_BACKEND` | `memory` | `firestore` or `memory`. `cloudbuild.yaml` sets `firestore` on deploy; the `memory` default is for local runs only, and on Cloud Run it would forget the estate on every scale-to-zero. |
 | `DEADMAN_FIRESTORE_PROJECT` | the SDK's default | GCP project holding the Firestore database. |
+| `DEADMAN_COLLECTORS` | unset — **the service warns on stderr and watches nobody's silence** | Path to the collector liveness declaration (see "Collector liveness" below). A named file that cannot be read or parsed is a startup failure. |
 | `DEADMAN_BRIEF_LOG` | `/var/log/deadman/morning-brief.jsonl` | Path the morning-brief probe reads. |
 | `DEADMAN_DISK_HISTORY` | `/tmp/deadman/disk-history.jsonl` | Where the disk probe appends its trend samples. Cloud Run's filesystem is ephemeral per instance, so the trend resets on every cold start — acceptable for the demo board; a persistent volume is out of scope for this task. |
 
@@ -201,6 +202,56 @@ The deploy step in `cloudbuild.yaml` uses `--update-env-vars`, not
 `--set-env-vars`, so redeploying preserves whichever of these you used.
 `--set-env-vars` replaces the entire environment and would take the service
 down on the next build.
+
+### Collector liveness: what makes an empty board mean something
+
+Accepting evidence over a wire creates a failure this project cannot tolerate:
+a healthy estate and a dead collector deliver the same empty inbox, and the
+board reads the inbox. So the service is told, in configuration, which
+collectors are expected to report, how often, and about what.
+
+Copy `infra/collector/collectors.example.json`, which declares the same
+collector and the same two surfaces as `collector.example.json` beside it:
+
+```json
+{
+  "collectors": [
+    {
+      "collector_id": "kevin-mac",
+      "interval_seconds": 900,
+      "surfaces": ["host:disk/", "cron:morning-brief"]
+    }
+  ]
+}
+```
+
+`collector_id` must match what the collector signs its batches with, and
+`interval_seconds` must match its `StartInterval` in the launchd plist (900
+in both, today). `grace_intervals` defaults to `1.0`, so silence becomes a
+fault after the cadence plus one whole missed run — 30 minutes here.
+
+**The cadence is declared, never inferred from what a collector has actually
+been doing.** A collector that dies slowly would otherwise teach the monitor
+to expect its own lengthening silences, and the board would stay green the
+whole way down.
+
+Ship the file with the image (it is configuration, not a secret) and point
+the variable at it:
+
+```bash
+gcloud run services update deadman --region=us-central1 \
+  --update-env-vars="DEADMAN_COLLECTORS=/app/infra/collector/collectors.json"
+```
+
+With it set, `GET /` gains a row per collector — `collector:kevin-mac`,
+`FAULT` the moment it goes quiet — and the summary separates surfaces that
+reported recently (`fresh_count`), reported too long ago (`stale_count`) and
+have never reported at all (`unreported_count`). A surface whose newest
+reading is older than its cadence reads `UNOBSERVABLE`, never `HEALTHY`:
+what we last heard is not news about now.
+
+Leaving the variable unset is legal and logs a warning on every boot, because
+the consequence is invisible on the board it produces.
 
 ### Firestore has to exist first
 

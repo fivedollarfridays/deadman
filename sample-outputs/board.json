@@ -34,5 +34,10 @@
   ],
   "healthy_count": 1,
   "fault_count": 0,
-  "blind_count": 1
+  "blind_count": 1,
+  "collectors_declared": 0,
+  "fresh_count": 0,
+  "stale_count": 0,
+  "unreported_count": 0,
+  "undeclared_surfaces": []
 }

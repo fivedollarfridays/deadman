@@ -116,6 +116,13 @@ class TestBuildBoard:
         assert "host:broken" in board["blind_spots"]
 
     def test_empty_probe_list_yields_an_empty_but_valid_board(self):
+        """Exact, not a subset: a key appearing on the board without a test
+        noticing is how a summary field drifts away from what it claims.
+
+        ``collectors_declared: 0`` is the honest reading of a board built with
+        no liveness — nobody's silence is being watched — rather than a row of
+        zeroes that looks like an estate with nothing wrong.
+        """
         board = build_board([])
 
         assert board == {
@@ -124,6 +131,11 @@ class TestBuildBoard:
             "healthy_count": 0,
             "fault_count": 0,
             "blind_count": 0,
+            "collectors_declared": 0,
+            "fresh_count": 0,
+            "stale_count": 0,
+            "unreported_count": 0,
+            "undeclared_surfaces": [],
         }
 
     def test_evidence_rows_are_json_serializable(self):
