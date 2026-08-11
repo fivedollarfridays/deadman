@@ -206,14 +206,23 @@ class TestMalformedAndOversized:
         assert "error" in payload
         assert store.latest_per_surface() == {}
 
-    def test_a_body_longer_than_its_declared_length_is_still_capped(self):
-        """A lying Content-Length must not become an unbounded read."""
+    def test_a_body_longer_than_its_declared_length_is_refused_and_never_stored(self):
+        """A lying Content-Length must not become an unbounded read.
+
+        This used to assert 413, which was a side effect of reading past the
+        declaration to discover the extra bytes. Reading past the declaration
+        is exactly what hung every ``POST /evidence`` on the first DM2 deploy
+        (see ``tests/test_ingest_body_read.py``), so the read is now bounded by
+        what the client declared and those bytes are never seen. The invariant
+        that actually matters is unchanged and is what is asserted here: the
+        request is refused and nothing reaches the store.
+        """
         store = InMemoryEvidenceStore()
         body = b"x" * (MAX_BODY_BYTES + 100)
 
         status, _payload = _endpoint(store).handle(_environ(body, "00", content_length=8))
 
-        assert status.startswith("413")
+        assert status[0] == "4", f"expected a refusal, got {status}"
         assert store.latest_per_surface() == {}
 
     def test_a_non_integer_content_length_is_a_400(self):

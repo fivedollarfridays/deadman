@@ -181,8 +181,25 @@ class IngestEndpoint:
 
 
 def _read_body(environ: dict) -> bytes:
-    """The request body, or a refusal. Never an unbounded read."""
+    """The request body, or a refusal. Never an unbounded read.
+
+    **The read is bounded by ``Content-Length`` when the client declares one.**
+    That is not an optimisation. A WSGI input stream is not required to report
+    EOF at the end of the request body, and ``wsgiref.simple_server`` — what
+    this service runs — hands over the raw socket file object, so asking for
+    more bytes than the client sent blocks until the client closes or the
+    platform gives up. The first DM2 deploy did exactly that: every
+    ``POST /evidence`` hung until Cloud Run returned 504 after five minutes,
+    with no application log line, while ``GET /`` was fine.
+
+    It survived review because the suite builds ``environ`` around an
+    ``io.BytesIO``, which returns what it has and reports EOF immediately. A
+    stream that cannot block cannot reproduce a block, so
+    ``tests/test_ingest_body_read.py`` asserts the *requested size* rather than
+    the bytes returned.
+    """
     declared = str(environ.get("CONTENT_LENGTH") or "").strip()
+    length: int | None = None
     if declared:
         try:
             length = int(declared)
@@ -192,7 +209,12 @@ def _read_body(environ: dict) -> bytes:
             raise BodyTooLarge(f"body of {length} bytes exceeds the {MAX_BODY_BYTES} byte cap")
 
     stream = environ.get("wsgi.input")
-    raw = stream.read(MAX_BODY_BYTES + 1) if stream is not None else b""
+    if stream is None:
+        return b""
+    # One byte past the cap when nothing was declared, so an undeclared
+    # oversized body is still caught below rather than read forever.
+    want = length if length is not None else MAX_BODY_BYTES + 1
+    raw = stream.read(want)
     if len(raw) > MAX_BODY_BYTES:
         raise BodyTooLarge(f"body exceeds the {MAX_BODY_BYTES} byte cap")
     return raw
