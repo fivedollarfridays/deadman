@@ -1,0 +1,38 @@
+{
+  "surfaces": [
+    {
+      "surface": "host:disk/",
+      "observation": "healthy",
+      "method": "local_artifact",
+      "summary": "<varies by host>",
+      "source": "statvfs:/",
+      "read_at": "2026-08-11T06:00:00+00:00",
+      "detail": {
+        "free_bytes": "<varies by host>",
+        "free_gb": "<varies by host>",
+        "total_gb": "<varies by host>",
+        "pct_free": "<varies by host>",
+        "floor_gb": 5.0,
+        "samples": "<varies by host>",
+        "trend": "insufficient history"
+      }
+    },
+    {
+      "surface": "cron:morning-brief",
+      "observation": "unobservable",
+      "method": "reported",
+      "summary": "cannot observe cron:morning-brief: log directory does not exist (path misconfigured?)",
+      "source": "<work>/absent/morning-brief.jsonl",
+      "read_at": "2026-08-11T06:00:00+00:00",
+      "detail": {
+        "reason": "log directory does not exist (path misconfigured?)"
+      }
+    }
+  ],
+  "blind_spots": [
+    "cron:morning-brief"
+  ],
+  "healthy_count": 1,
+  "fault_count": 0,
+  "blind_count": 1
+}

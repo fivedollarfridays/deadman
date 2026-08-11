@@ -89,9 +89,19 @@ def verify_remediation(
     on: its surface has to appear among the evidence the diagnosis cited.
     Verifying against any other probe would prove nothing about the fault
     that was actually acted on, so this refuses rather than guessing.
+
+    **A diagnosis that cited nothing is not that error.** When every citation
+    was rejected there are no surfaces to match against, and that is ordinary
+    runtime reality on a non-deterministic model rather than a caller mistake.
+    It returns ``NOT_ATTEMPTED``, which is what the executor would decide
+    anyway, because a monitor that dies whenever its model has an off moment
+    has become the outage it was watching for. Found by rehearsing the live
+    demo: two identical runs, one grounded, one not, and the second crashed.
     """
     if max_attempts < 1:
         raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
+    if not diagnosis.is_actionable:
+        return VerificationOutcome(status=VerificationStatus.NOT_ATTEMPTED, attempts=())
     if probe.surface not in _surfaces(diagnosis):
         raise ValueError(
             f"probe {probe.surface!r} is not among the surfaces diagnosis cited "

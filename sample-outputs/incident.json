@@ -1,0 +1,41 @@
+{
+  "status": "correlated",
+  "basis": "inferred",
+  "surfaces": [
+    "host:mac/disk",
+    "metricool:fwtx_dao"
+  ],
+  "candidate_surfaces": [
+    "host:mac/disk",
+    "metricool:fwtx_dao",
+    "sms:relay"
+  ],
+  "shared_cause": "The infrastructure is experiencing failures due to disk space exhaustion on the host. This is demonstrated by the host disk encountering a 'build aborted: no space left on device' error, which has also caused the metricool:fwtx_dao upload worker to fail with 'upload worker: OSError [Errno 28] no space left on device'.",
+  "confidence": 0.4,
+  "claimed_confidence": 0.9,
+  "unexplained": [
+    "sms:relay"
+  ],
+  "reason": "co-occurring faults on host:mac/disk, metricool:fwtx_dao are tied together by evidence cited from each; the relationship was inferred, not traversed",
+  "evidence_ids": [
+    "host:mac/disk#7f8f3eb7",
+    "metricool:fwtx_dao#ace64ba3"
+  ],
+  "diagnosis": {
+    "status": "grounded",
+    "model": "gemini-3.5-flash",
+    "temperature": 0.0,
+    "prompt_version": "diagnose/v1",
+    "citations": [
+      {
+        "evidence_id": "host:mac/disk#7f8f3eb7",
+        "quote": "build aborted: no space left on device"
+      },
+      {
+        "evidence_id": "metricool:fwtx_dao#ace64ba3",
+        "quote": "upload worker: OSError [Errno 28] no space left on device"
+      }
+    ],
+    "rejected_claims": []
+  }
+}
