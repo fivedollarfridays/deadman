@@ -2,7 +2,7 @@
 id: DM1.8
 title: Cloud Run deployment via Cloud Build
 plan: plan-sprint-1-engage
-status: blocked
+status: done
 sprint: '1'
 depends_on:
 - DM1.1
@@ -18,7 +18,12 @@ runtime:
     worktree: 66da8463b2159020e23c2a7624684c72df103299
   started_at: '2026-08-11T01:33:54.096314+00:00'
   completed_at: '2026-08-11T01:40:05.564440+00:00'
+  phase_segments:
+  - phase: implementation
+    started_at: '2026-08-11T01:33:54.096314+00:00'
+    completed_at: '2026-08-11T02:51:41.256071+00:00'
 ac_verified: null
+completed_at: '2026-08-11T02:51:41.145759+00:00'
 ---
 
 # Cloud Run deployment via Cloud Build
