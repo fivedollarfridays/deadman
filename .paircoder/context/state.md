@@ -64,14 +64,14 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 2 `done`, 1 `blocked`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 3 `done`, 1 `blocked`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
 | DM2.2 | Authenticated ingest, and what a reported observation means ✓ | P0 | 35 | claude-opus-5 | DM2.1 |
 | DM2.7 | An alarm that actually reaches Kevin — **blocked** | P0 | 30 | claude-sonnet-5 | DM2.1 |
-| DM2.3 | The collector: sweep where the surfaces actually are | P0 | 35 | claude-sonnet-5 | DM2.2 |
+| DM2.3 | The collector: sweep where the surfaces actually are ✓ | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health | P0 | 30 | claude-opus-5 | DM2.2 |
 | DM2.5 | Real surfaces, starting with the one already broken | P0 | 30 | claude-sonnet-5 | DM2.3 |
 | DM2.6 | Scheduled sweeps and scheduled self-check | P0 | 25 | claude-sonnet-5 | DM2.4 |
@@ -124,6 +124,90 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.3 done: the collector sweeps where the surfaces actually are
+
+`src/deadman/collector/` now holds the process that runs on Kevin's machines:
+`config.py`, `transport.py`, `spool.py`, `run.py`. 50 new tests (412 total, up
+from 362), all four gates clean.
+
+**Which probes run is a fact about a JSON file, never the collector's
+source.** `config.py`'s `PROBE_TYPES` maps a type name to the real dataclass
+(`DiskProbe`, `MorningBriefProbe`); `build_probes` constructs them, coercing
+string arguments to `Path` by reading the *target dataclass's own field
+annotations* rather than hand-coding which argument name means "this is a
+path" per probe. That is the one mechanism a probe registered later —
+DM2.5's job — needs nothing new here to use. `infra/collector/
+collector.example.json` is not just documentation: `test_collector_example_
+config.py` loads and builds real probes from it, so the README's own example
+can't drift from what the parser actually accepts.
+
+**Probe isolation cost nothing to add because it was not reimplemented.**
+The collector calls `deadman.probes.base.sweep()` directly — the same
+never-raise contract DM1 built — so "a raising probe doesn't blind the rest
+of the sweep" is inherited, not a second copy of that rule to keep in sync.
+
+**Store-and-forward has exactly two outcomes for a row: shipped, or still
+spooled.** `spool.py`'s `Spool` keeps nothing in process memory — every
+method reads or writes its directory directly, one file per failed batch,
+named so filename order is delivery order. That is what makes the restart
+AC free rather than engineered: a second `Spool` (or `Collector`) built with
+no reference to the one that failed sees exactly what was left on disk,
+because the directory *is* the state. A non-200 reply is spooled exactly
+like a connection failure — `transport.py`'s `TransportError` names only
+"never reached a server that could answer"; a service that answered and
+refused is a different fact, but both mean the batch is not yet delivered.
+
+**A resend is a fresh signature, not a replayed one — the subtle part.**
+DM2.2's freshness window is five minutes; a spool can sit far longer than
+that while a network is down. Reusing the original `signed_at` would make
+an honest retry look like a stale replay and fail on arrival, exactly
+backwards for a store-and-forward mechanism. So every send — first attempt
+or the Nth retry — builds a fresh `Batch` at the current clock reading and
+signs *that*, while each evidence row keeps its own original `read_at`
+untouched. `test_the_resent_batch_is_freshly_signed_not_replayed_stale`
+pins it with a clock that jumps 6 hours between the failed and the
+recovering send.
+
+**Dry run is real, not simulated.** `--dry-run` never calls
+`self.transport` at all — not "calls a mock", calls it *zero times* — so
+`test_dry_run_makes_zero_network_calls_under_the_real_transport` runs it
+with the actual `UrllibTransport` inside the suite's hermetic socket block
+from `conftest.py`. A pass means it structurally cannot have dialed out, not
+that a fake happened not to be called.
+
+**A malformed config fails loudly, naming the offending key**, at every
+layer: a missing top-level key, a bad `probes[i].type`, args that don't
+match the target constructor, `DEADMAN_INGEST_SECRET` unset — each raises
+naming the specific thing that's wrong, and the CLI (`main()`) catches these
+at startup and exits non-zero with the message on stderr rather than a
+traceback or a silent empty sweep.
+
+**`infra/launchd/com.deadman.collector.plist` + README, both executed, not
+just written.** The plist is a LaunchAgent (not a Daemon — no root needed to
+sweep files Kevin's own account can read), `StartInterval` not
+`StartCalendarInterval` (a sleeping laptop catches up on wake instead of
+skipping a day), and carries no secret — the shared ingest secret is sourced
+from `~/.deadman/collector-env.sh` at run time, unchecked-in, matching the
+rule DM2.2 already enforces on the service side
+(`TestNothingSecretIsCommitted`). Verified by hand this session: `plutil
+-lint` on the template and on a `sed`-materialized copy with real paths
+substituted (both `OK`), and the README's own `deadman-collector --dry-run`
+command run for real against the example config. `launchctl load` itself
+was not run — installing a live recurring background job on this machine is
+outside what this session should do unattended; that step is Kevin's to run
+by hand from a documented, executed command.
+
+Files: `src/deadman/collector/{__init__,config,transport,spool,run}.py`,
+`infra/launchd/com.deadman.collector.plist`, `infra/collector/
+collector.example.json`, `infra/README.md` ("The collector" section),
+`docs/ARCHITECTURE.md` ("The collector: where evidence actually gets
+produced"), `pyproject.toml` (`deadman-collector` console script), five new
+test files.
+
+Gates: `pytest -n auto --dist=worksteal` 412/412 (up from 362); `ruff check
+.` and `ruff format --check .` clean; `bpsai-pair arch check --strict`
+clean.
 
 ### Session: 2026-08-11 — DM2.7 blocked: the alarm is real, the rail it sends over is not
 
@@ -961,32 +1045,46 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2).** DM2.1 and DM2.2 are done. **DM2.7 is blocked**, not on code —
-every piece it needed to build is written, tested and mutation-checked — but
-on a real, working SMTP account to send through: `ops/.env`'s SMTP block is
-a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real sends will
-fail at connect`), and ops's own alertmanager and `T152` backlog item confirm
-email delivery isn't live there yet either. **Unblocking it needs a human
-decision, not more code**: either wait on ops's `T152` (outbound email rail)
-to land, or point `DEADMAN_ALERT_*` at any other working SMTP account (a
-personal Gmail app password would do) and run the one-time verification
+**Now (DM2).** DM2.1, DM2.2 and DM2.3 are done. **DM2.7 is blocked**, not on
+code — every piece it needed to build is written, tested and mutation-checked
+— but on a real, working SMTP account to send through: `ops/.env`'s SMTP
+block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real sends
+will fail at connect`), and ops's own alertmanager and `T152` backlog item
+confirm email delivery isn't live there yet either. **Unblocking it needs a
+human decision, not more code**: either wait on ops's `T152` (outbound email
+rail) to land, or point `DEADMAN_ALERT_*` at any other working SMTP account
+(a personal Gmail app password would do) and run the one-time verification
 script in `docs/alerting.md`'s last section. Once that one AC is checked,
 `bpsai-pair task update DM2.7 --status done` should pass on the first try —
-everything else is already checked off. DM2.2 done also unblocks **DM2.3**
-(the collector) and **DM2.4** (collector liveness), and neither depends on
-DM2.7, so the sprint is not stalled by this — DM2.3/DM2.4 are next.
+everything else is already checked off. **DM2.3 done unblocks DM2.5** (real
+surfaces); **DM2.4** (collector liveness) only needed DM2.2 and was already
+unblocked — neither depends on DM2.7, so the sprint is not stalled by this.
+DM2.4 is next.
 
-What the next three tasks inherit from DM2.2:
+What DM2.5 inherits from DM2.3, and what DM2.3 actually built (superseding
+the DM2.2-session notes below, which described the plan rather than the
+result):
 
-- **DM2.3** signs with `deadman.ingest.wire.dumps` + `auth.sign` and posts to
-  `POST /evidence` with the `X-Deadman-Signature` header. The wire format is
-  the store's document format plus `version`/`collector_id`/`signed_at`; the
-  collector must send the **exact bytes** `dumps` returned, since the MAC
-  covers bytes. `signed_at` must be within `FRESHNESS_SECONDS` (300) of the
-  service's clock, so a spool held through an outage must be **re-signed**
-  before re-delivery — the batch's rows keep their original `read_at`, which
-  is the whole point of the two timestamps being separate. Retrying is safe
-  and expected: replay is idempotent.
+- **The collector is `src/deadman/collector/{config,transport,spool,run}.py`,
+  done.** It signs with `deadman.ingest.wire.dumps` + `auth.sign` and posts
+  to `POST /evidence` with the `X-Deadman-Signature` header, exactly as
+  planned — but the freshness/spool interaction below was resolved
+  differently than the plan implied: a spooled batch is **not** re-signed
+  with its original `signed_at` before redelivery, because that would still
+  read as stale after any outage longer than 5 minutes. `Collector._send`
+  builds a **fresh `Batch`** — current clock, same evidence rows, same
+  `read_at` — on every attempt, first send or the Nth retry. That is the
+  actual mechanism DM2.6 (or any future caller) should reuse if it schedules
+  the collector rather than calling `run_once` directly.
+- **DM2.5's extension point is `PROBE_TYPES` in `collector/config.py`.**
+  Adding a real surface (Metricool, SMS relay) that needs an injected client
+  is not yet possible through a config file — only `DiskProbe` and
+  `MorningBriefProbe` are registered, because both take plain arguments a
+  JSON file can express. A probe needing a `SchedulerClient` or
+  `RelayClient` needs either a registry entry that knows how to construct
+  the client from config (e.g. an API key field), or a documented decision
+  that those probes are wired by code, not by this collector's config file.
+  Decide this explicitly in DM2.5 rather than discovering it mid-task.
 - **DM2.4** reads `detail.collector_id` and `detail.received_at` off stored
   rows. `received_at` is the field that makes "this collector has gone quiet"
   answerable; `read_at` cannot, because it is the collector's own clock on an
@@ -1047,7 +1145,8 @@ Items below are DM1-era and carried forward.
    filesystem); and the live demo must run unedited per the rules, so the
    break-and-heal sequence needs rehearsing end to end against the deployed
    URL, not locally.
-1. Start DM2.1 — evidence store Protocol seam and durable backend
+1. Start DM2.4 — collector liveness (absence must not read as health); DM2.5
+   (real surfaces) is next after that, now that DM2.3 has unblocked it.
 
 
 ## Blockers
