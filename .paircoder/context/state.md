@@ -64,13 +64,13 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 2 `done`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 2 `done`, 1 `blocked`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
 | DM2.2 | Authenticated ingest, and what a reported observation means ✓ | P0 | 35 | claude-opus-5 | DM2.1 |
-| DM2.7 | An alarm that actually reaches Kevin | P0 | 30 | claude-sonnet-5 | DM2.1 |
+| DM2.7 | An alarm that actually reaches Kevin — **blocked** | P0 | 30 | claude-sonnet-5 | DM2.1 |
 | DM2.3 | The collector: sweep where the surfaces actually are | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health | P0 | 30 | claude-opus-5 | DM2.2 |
 | DM2.5 | Real surfaces, starting with the one already broken | P0 | 30 | claude-sonnet-5 | DM2.3 |
@@ -124,6 +124,66 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.7 blocked: the alarm is real, the rail it sends over is not
+
+`src/deadman/remediate/transports.py` now holds everything DM1.11's
+`AlertChannel` was missing: `EmailTransport` (stdlib `smtplib` +
+`email.message`, no new dependency — STARTTLS, login, `send_message`, the
+same shape as `ops/lib/email_send.py`), `email_transport_from_env` (six
+`DEADMAN_ALERT_*` variables, refuses via `EmailTransportNotConfigured` if any
+are missing, no hardcoded credential defaults),
+`real_monitored_surfaces()` (reads `deadman.service.default_probes()`
+directly rather than a retyped literal — DM1.11's own test used a hand-typed
+tuple, and this is what replaces that with the real thing),
+`ThrottledAlertChannel` (documented 1h window, suppresses only a *repeat* of
+the same state, never a state change), and `record_transport_failures`
+(wraps `send` so a failure is appended to the DM2.1 store as `FAULT` on
+`alert:email` before re-raising — the raise stays, per `AlertChannel.alert`'s
+"a swallowed alert is silence" contract). 20 new tests in
+`tests/test_transports.py`, all passing first run; the two behavioral guards
+the ACs call out (state-change-always-delivered, failure-not-swallowed) were
+mutation-checked by hand (`PYTHONDONTWRITEBYTECODE=1`), each caught by a
+named test.
+
+**Found and fixed in passing, unrelated to this task's file scope:**
+`tests/test_ingest_startup.py`'s own secret-scanning test
+(`TestNothingSecretIsCommitted`, from DM2.2) tripped on its own docstring —
+the RST literal markup `` ``DEADMAN_INGEST_SECRET=`` `` in its prose was
+captured by the `git grep` regex as a "committed value" of `` `` `` because
+backtick wasn't excluded from the character class. Pre-existing on `HEAD`
+before this session touched anything (confirmed via `git show`, only one
+commit — DM2.2's own — has ever touched that file); fixed by excluding
+backtick from the captured value and treating a genuinely empty capture
+(nothing followed `=` before a delimiter) as inherently non-secret rather
+than a failure. `pytest -n auto --dist=worksteal` was reporting 341/342
+before this fix.
+
+**Blocked on one AC, not done: "one real message is confirmed received."**
+Checked whether a real send was possible before writing anything — this
+project's own rule, paid for once already by DM1.8's live-deploy blocker, is
+that a runbook nobody has executed is a hypothesis. `ops/.env`'s active SMTP
+block is labelled in its own comment `# DUMMY SMTP — for T87.2 testing only.
+Real sends will fail at connect`; the real values it would use in production
+sit commented out, never activated.
+`ops/monitoring/alertmanager/alertmanager.yml` independently confirms email
+delivery is still a `# In production, add:` TODO there, and ops carries its
+own standing backlog item for this
+(`backlog-sprint-T152-outbound-email-rail.md`). **The "existing ops email
+rail" this task was scoped against does not yet exist as a working,
+deliverable rail** — that is a fact about a sibling repo, not a defect in
+this one. No credential value was read into this session beyond confirming
+that comment and the two commented-out variable *names*; nothing was printed
+or logged.
+
+Every other AC is met and checked off in `.paircoder/tasks/DM2.7.task.md`,
+including the wiring AC (`real_monitored_surfaces()` sourced from the actual
+probe list) and `docs/alerting.md` (written with the blocked finding
+recorded plainly rather than a fabricated "confirmed received"). Gates:
+`pytest -n auto --dist=worksteal` 362/362, `ruff check .` and `ruff format
+--check .` clean, `bpsai-pair arch check --strict` clean.
+`bpsai-pair task update DM2.7 --status done` correctly refused on the one
+unchecked item; set to `blocked` rather than forced through.
 
 ### Session: 2026-08-11 — DM2.2 done: authenticated ingest, and the arrival rule
 
@@ -901,9 +961,20 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2).** DM2.1 and DM2.2 are done. **DM2.7** (an alarm that reaches
-Kevin) is the remaining wave-2 task and is unblocked; DM2.2 done also unblocks
-**DM2.3** (the collector) and **DM2.4** (collector liveness).
+**Now (DM2).** DM2.1 and DM2.2 are done. **DM2.7 is blocked**, not on code —
+every piece it needed to build is written, tested and mutation-checked — but
+on a real, working SMTP account to send through: `ops/.env`'s SMTP block is
+a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real sends will
+fail at connect`), and ops's own alertmanager and `T152` backlog item confirm
+email delivery isn't live there yet either. **Unblocking it needs a human
+decision, not more code**: either wait on ops's `T152` (outbound email rail)
+to land, or point `DEADMAN_ALERT_*` at any other working SMTP account (a
+personal Gmail app password would do) and run the one-time verification
+script in `docs/alerting.md`'s last section. Once that one AC is checked,
+`bpsai-pair task update DM2.7 --status done` should pass on the first try —
+everything else is already checked off. DM2.2 done also unblocks **DM2.3**
+(the collector) and **DM2.4** (collector liveness), and neither depends on
+DM2.7, so the sprint is not stalled by this — DM2.3/DM2.4 are next.
 
 What the next three tasks inherit from DM2.2:
 
@@ -922,7 +993,8 @@ What the next three tasks inherit from DM2.2:
   observation that may have been spooled. Note every ingested row is
   `Method.REPORTED` regardless of what the collector claimed — check
   `detail.reported_method` if the collector's own grade matters.
-- **DM2.7** records transport failures through the same store.
+- **DM2.7** records transport failures through the same store. It is
+  `blocked` on one AC — see Blockers.
 - **Correction to the note left under DM2.1:** idempotent replay was *not*
   free from content-addressed `row_id`. An arriving row must carry an arrival
   time, which changes the hash on every delivery, so the store's dedupe would
@@ -1017,6 +1089,26 @@ bpsai-pair plan feasibility plan-2026-08-dm1-deadman-v1 --override "<reason>"
 **3. Sprint is 345 Cx against a 300 Cx budget (~15% over).** Per the planning
 skill's scope rule this is Epic-shaped; the plan record is currently a Story.
 Either accept the overrun, cut from the list above, or re-scope to an Epic.
+
+**4. DM2.7's "one real message is confirmed received" AC — needs a real SMTP
+account, not more code.** Every other piece of DM2.7 is done: `EmailTransport`,
+`email_transport_from_env`, `real_monitored_surfaces()`, `ThrottledAlertChannel`,
+`record_transport_failures`, all tested and mutation-checked, `docs/alerting.md`
+written. This is the one AC blocked on external state — `ops/.env`'s active
+SMTP block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real
+sends will fail at connect`), and `ops/monitoring/alertmanager/alertmanager.yml`
+independently confirms real email delivery isn't live there either (every
+receiver is a `localhost` webhook, `# In production, add: Email` still a TODO).
+ops carries its own backlog item for this
+(`backlog-sprint-T152-outbound-email-rail.md`).
+
+**Not overridden — needs one of two decisions:** wait for `T152` to land a
+real ops SMTP account, or point `DEADMAN_ALERT_*` at any other working
+account (e.g. a personal Gmail app password) in the meantime. Either way, the
+verification is the one-time script at the end of `docs/alerting.md` — run
+it, confirm the message lands, check the AC box, then `bpsai-pair task update
+DM2.7 --status done` should pass immediately since nothing else is
+outstanding.
 <!-- paircoder:state:end -->
 ## Quick Commands
 

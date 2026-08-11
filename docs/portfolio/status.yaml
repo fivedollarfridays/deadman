@@ -1,9 +1,16 @@
 version: 1
-updated_at: '2026-08-11T19:46:04.930450+00:00'
+updated_at: '2026-08-11T20:01:18.850575+00:00'
 last_transition:
-  event: task_done
-  at: '2026-08-11T19:46:04.930450+00:00'
-  task_id: DM2.2
+  event: task_blocked
+  at: '2026-08-11T20:01:18.850575+00:00'
+  task_id: DM2.7
+  reason: "\u274C Cannot complete: 1 acceptance criteria item(s) unchecked\n\nUnchecked\
+    \ items:\n  \u25CB An email transport delivers through the existing ops email\
+    \ rail and one real\nmessage is confirmed received \u2014 **BLOCKED, see Evidence.**\
+    \ \n`EmailTransport`/`email_transport_from_env` are written and tested against\
+    \ the \nexact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own \n`SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM`\
+    \ in `.env` are labelled in-repo as `# \nDUMMY SMTP \u2014 for T87.2 testing only.\
+    \ Real sends will fail"
 transitions:
 - event: dispatch
   at: '2026-08-11T00:55:41.784992+00:00'
@@ -81,6 +88,19 @@ transitions:
 - event: task_done
   at: '2026-08-11T19:46:04.930450+00:00'
   task_id: DM2.2
+- event: dispatch
+  at: '2026-08-11T19:46:06.338807+00:00'
+  task_id: DM2.7
+- event: task_blocked
+  at: '2026-08-11T20:01:18.850575+00:00'
+  task_id: DM2.7
+  reason: "\u274C Cannot complete: 1 acceptance criteria item(s) unchecked\n\nUnchecked\
+    \ items:\n  \u25CB An email transport delivers through the existing ops email\
+    \ rail and one real\nmessage is confirmed received \u2014 **BLOCKED, see Evidence.**\
+    \ \n`EmailTransport`/`email_transport_from_env` are written and tested against\
+    \ the \nexact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own \n`SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM`\
+    \ in `.env` are labelled in-repo as `# \nDUMMY SMTP \u2014 for T87.2 testing only.\
+    \ Real sends will fail"
 tasks:
   DM1.1:
     status: dispatched
@@ -125,3 +145,13 @@ tasks:
   DM2.2:
     status: done
     updated_at: '2026-08-11T19:46:04.930450+00:00'
+  DM2.7:
+    status: blocked
+    updated_at: '2026-08-11T20:01:18.850575+00:00'
+    reason: "\u274C Cannot complete: 1 acceptance criteria item(s) unchecked\n\nUnchecked\
+      \ items:\n  \u25CB An email transport delivers through the existing ops email\
+      \ rail and one real\nmessage is confirmed received \u2014 **BLOCKED, see Evidence.**\
+      \ \n`EmailTransport`/`email_transport_from_env` are written and tested against\
+      \ the \nexact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own \n\
+      `SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM` in `.env` are labelled in-repo as `#\
+      \ \nDUMMY SMTP \u2014 for T87.2 testing only. Real sends will fail"
