@@ -1,0 +1,19 @@
+id: plan-sprint-2-engage
+metadata:
+  cli_channel: stable
+  source_backlog: plans/backlogs/DM2-make-it-real.md
+phases:
+- id: 1
+  tasks:
+  - DM2.1
+  - DM2.2
+  - DM2.7
+  - DM2.3
+  - DM2.4
+  - DM2.5
+  - DM2.6
+  - DM2.8
+  - DM2.9
+status: in_progress
+title: Sprint 2
+type: feature
