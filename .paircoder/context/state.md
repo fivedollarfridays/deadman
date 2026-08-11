@@ -18,10 +18,10 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, DM1.4, and DM1.9 are `done`. DM1.8 is `blocked` on a
-live GCP deploy step this session cannot perform (see Blockers). DM1.5
-(Gemini diagnosis, P0 hub) and DM1.11 (depends on DM1.8) remain the next
-unblocked wave-3+ work.
+DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, and DM1.9 are `done`. DM1.8 is `blocked` on
+a live GCP deploy step this session cannot perform (see Blockers). With the
+DM1.5 hub landed, **DM1.6 (remediation registry, P0) and DM1.10 (correlation)
+are unblocked**; DM1.11 still waits on DM1.8.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -29,7 +29,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.4 and DM1.9 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.5 and DM1.9 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -37,7 +37,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.2 | Evidence model + probe contract tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.3 | Brief + disk probe tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.4 | Metricool probe + verification spike ✓ | P1 | 35 | claude-opus-5 | DM1.1 |
-| DM1.5 | Diagnosis layer on Gemini via ADK | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
+| DM1.5 | Diagnosis layer on Gemini via ADK ✓ | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
 | DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
@@ -57,6 +57,77 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.5 diagnosis layer on Gemini via ADK (`/start-task DM1.5`)
+
+- The design question this task actually turned on: *what does "the model may
+  not assert a fact it wasn't given" mean when the model's output is prose?*
+  The answer taken here is to stop treating the response as one thing. A
+  response has **facts** and it has **inference**, they get different fields,
+  and only one of them is believed.
+  - `citations` — each is `{evidence_id, quote}`, and the quote must appear
+    **verbatim** (case/whitespace normalised only) in the *specific* evidence
+    it names. Checked per-evidence rather than against the whole pile, because
+    attributing the scheduler's 500 to the disk read is a causal claim and
+    letting it through because the string exists *somewhere* would smuggle the
+    interesting part of the reasoning past the check.
+  - `hypothesis` — free prose, allowed to be new text, which is the entire
+    reason a model is in this pipeline rather than a rule engine.
+- **Rejection is all-or-nothing, deliberately.** One invented fact among four
+  good citations discards the whole answer, because the hypothesis was
+  reasoned from the invented fact along with the rest — salvaging the
+  survivors leaves a conclusion standing on a premise that was thrown out.
+  The planted-fabrication recording is built this way on purpose (one real
+  citation, one invented) since a wholly fabricated response is the easy case.
+- **Three statuses, mirroring `Observation`.** `GROUNDED` /
+  `UNGROUNDED` ("the model said something false") / `UNAVAILABLE` ("we could
+  not read what it said"). The last two are never collapsed: one is a fact
+  about the response, the other a fact about our own blindness, and a report
+  that conflates them tells an operator to distrust a model that may have been
+  fine. `DiagnosisEngine` never raises and never returns `None` — same
+  contract as `run_probe`, one layer up.
+- **Confidence is capped, not accepted** (beyond the literal AC, kept because
+  it is the difference between confidence being a number the model made up and
+  one the system stands behind). The weakest cited evidence sets the ceiling
+  off `Method`'s existing trust ordering — `REPORTED` caps at 0.4, a blind
+  citation caps at 0.5. The flagship recording claims 0.7 leaning partly on a
+  scheduler report and lands at 0.4; `claimed_confidence` is kept alongside,
+  since the gap is itself a signal. A test asserts the cap does *not* bind on
+  strong evidence, so it stays meaningful rather than a blanket haircut.
+- Four evasion routes are tested and all fail closed: fabricated quote; quote
+  lifted from a *sibling* evidence row; hallucinated surface; and an evidence
+  id smuggled into the prose while every citation is legitimate — that last
+  one passes a citations-array-only check, which is why the prose is scanned
+  too. Plus: no citations at all, confidence outside `[0,1]`, unreadable
+  response, model down, and an empty bundle (which never reaches the model —
+  with nothing to reason over, anything said is invention).
+- **Known limit, stated rather than papered over** (`grounding.py`, "Where the
+  enforcement ends"; also `docs/ARCHITECTURE.md`): arbitrary unsupported prose
+  *inside* the hypothesis cannot be detected deterministically. The defence is
+  structural, not detective — the hypothesis is never rendered or consumed as
+  fact, carries capped confidence, and DM1.6 selects deterministic code off
+  the diagnosis. A fabricated sentence is visible to a human and inert to the
+  machine, which is the most this boundary can honestly claim.
+- Files: `src/deadman/diagnose/{schema,grounding,prompt,engine,gemini}.py`,
+  `tests/{test_diagnose,test_diagnose_grounding,recordings}.py`,
+  `tests/recorded/` (8 recordings + README), `docs/ARCHITECTURE.md`,
+  `pyproject.toml`. Split beyond the brief's two modules to stay inside
+  `arch check --strict`'s function/file limits and to keep grounding
+  independently testable from the engine.
+- `PROMPT_VERSION` is made honest by pinning `prompt_fingerprint()` in a test:
+  editing the instructions without bumping the version fails the suite, so a
+  diagnosis recorded last week can still be explained by the prompt that
+  produced it.
+- Gates: `pytest tests/` 117/117 (up from 61); `ruff check .` clean;
+  `bpsai-pair arch check --strict` clean.
+- **Carried into DM1.6/DM1.12, needs a human with GCP access:** the ADK call
+  shape in `gemini.py` is the one unexercised code path. No `google-adk` and
+  no GCP credentials exist here (same constraint as the DM1.8 blocker), so it
+  is written to the documented ADK interface and flagged with a `.. warning::`
+  naming the exact smoke test. Contest eligibility depends on a real Gemini
+  call happening at least once — see What's Next #1. Everything the model
+  touches downstream is model-agnostic and fully covered offline, so the smoke
+  test is the only thing that gap blocks.
 
 ### Session: 2026-08-11 — DM1.9 SMS relay probe with active canary (`/start-task DM1.9`)
 
@@ -305,19 +376,24 @@ retiring the seven existing point-solution monitors.
 
 ## What's Next
 
-1. **DM1.8 needs a human with GCP credentials** to run
-   `gcloud builds submit --config cloudbuild.yaml .` (see `infra/README.md`)
-   from a machine/session that has `gcloud` authenticated against a real
-   project, then report the deployed URL back so the last two ACs can be
-   checked and the task closed. Everything short of that live step is done
-   and verified (see Blocker #1 and this session's entry above).
-2. DM1.9 is done. DM1.5 (Gemini diagnosis) is unblocked and is the P0 hub —
-   next natural pickup.
-3. DM1.5's diagnosis layer must handle `UNOBSERVABLE` as a first-class input,
-   not an error case — after DM1.4 and DM1.9, two surfaces now report it by
-   design (opaque platforms, cadence-not-due).
-4. DM1.10 (cross-surface correlation) depends on DM1.3 and DM1.5, not DM1.9 —
-   still blocked until DM1.5 lands.
+1. **Two things now need the same human with GCP access**, and they are worth
+   doing in one sitting: (a) DM1.8's `gcloud builds submit --config
+   cloudbuild.yaml .` per `infra/README.md`, reporting the deployed URL back;
+   (b) one live Gemini smoke test through `GeminiClient` per the `.. warning::`
+   in `src/deadman/diagnose/gemini.py`, to confirm the ADK call shape and to
+   satisfy contest eligibility, which requires a real Gemini call. Save the raw
+   response into `tests/recorded/` as a genuine capture and retire the authored
+   one; nothing in the engine changes, it only ever sees a string.
+2. DM1.5 is done, so **DM1.6 (remediation registry) and DM1.10 (correlation)
+   are both unblocked** — DM1.6 is the P0 and the Taskmaster requirement.
+3. DM1.6 should key on `Diagnosis.is_actionable`, not on status directly.
+   An `UNGROUNDED` or `UNAVAILABLE` diagnosis must escalate, never select an
+   action — that is the "no matching action escalates rather than guessing" AC
+   and the reason the flag exists.
+4. DM1.10 can reuse `tests/recordings.py` and the `bundle-*.json` envelope
+   for its own recorded-evidence cases; the disk-cascade bundle it needs
+   ("disk fills, then everything dies") is already there and already carries a
+   blind surface alongside the two faults.
 5. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
    deploy lands.
 
