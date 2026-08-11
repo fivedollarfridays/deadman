@@ -9,6 +9,12 @@ description = "Silent-failure detection and remediation agent for heterogeneous 
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+# The self-check is meant to be run by a scheduler, and a scheduler reads
+# nothing but the exit status. Giving it a real console entry point is what
+# makes "exits non-zero" a property of a command rather than of a function.
+deadman-self-check = "deadman.self_check:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0,<10",
