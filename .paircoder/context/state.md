@@ -18,9 +18,10 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, and DM1.4 are `done`. DM1.8 is `blocked` on a live GCP
-deploy step this session cannot perform (see Blockers). DM1.9 is unblocked
-and ready to start next.
+DM1.1, DM1.2, DM1.3, DM1.4, and DM1.9 are `done`. DM1.8 is `blocked` on a
+live GCP deploy step this session cannot perform (see Blockers). DM1.5
+(Gemini diagnosis, P0 hub) and DM1.11 (depends on DM1.8) remain the next
+unblocked wave-3+ work.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -28,7 +29,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.4 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.4 and DM1.9 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -40,7 +41,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
 | DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
-| DM1.9 | SMS relay probe with active canary | P1 | 30 | claude-sonnet-5 | DM1.1 |
+| DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.10 | Cross-surface correlation | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
 | DM1.11 | Self-liveness + out-of-band alerting | P1 | 25 | claude-sonnet-5 | DM1.8 |
 | DM1.12 | Integration gate: demo, README, diagram | P0 | 30 | claude-opus-5 | all |
@@ -56,6 +57,53 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.9 SMS relay probe with active canary (`/start-task DM1.9`)
+
+- `src/deadman/probes/sms_relay.py`: `SmsRelayProbe`, built on the same
+  never-passive principle as Metricool — silence on this rail is
+  structurally ambiguous (no traffic vs. dead rail look identical), so the
+  probe never infers health from quiet and instead dispatches its own
+  `Method.ACTIVE_CANARY` and reads the result back.
+  - Dispatch acceptance (`DispatchOutcome.ACCEPTED`) is treated the same way
+    Metricool treats a scheduler report: a claim, not evidence. `HEALTHY`
+    requires `SentFolderReader.find(token)` to confirm the canary landed;
+    accepted-but-never-landed is `FAULT` ("dead rail"), not silence.
+  - `DispatchOutcome.UNREACHABLE` (can't reach the relay host at all) →
+    `UNOBSERVABLE`, same treatment as any broken instrument — it says
+    nothing about the relay itself. `DispatchOutcome.REJECTED` (host
+    answered and explicitly refused the send) → `FAULT`, real evidence the
+    relay is broken. Both carry a `detail["dispatch_outcome"]` tag so a
+    report can tell them apart.
+  - Cadence: canaries are real, billable sends against a real carrier, so
+    the probe records each attempt to a `history_path` (append-only jsonl,
+    same pattern as `disk.py`'s trend history) and only fires a fresh
+    canary once `cadence_hours` has elapsed since the last one —
+    `DEFAULT_CADENCE_HOURS = 12.0`. Inside the window, `observe()` returns
+    `UNOBSERVABLE`, never `HEALTHY`: no fresh canary this sweep means no
+    fresh evidence, full stop. Attempts are recorded even on
+    unreachable/rejected outcomes so a persistently broken relay isn't
+    hammered every sweep.
+- `tests/test_probe_sms_relay.py`: 14 tests, no live network (hermetic
+  `conftest.py` blocks sockets suite-wide; no `allow_network` marker used).
+  Covers: canary confirmed → `HEALTHY`; unreachable host → `UNOBSERVABLE`
+  (never `FAULT`); rejected send → `FAULT`, distinct from unreachable in
+  `detail`; not-due-yet → `UNOBSERVABLE` (never `HEALTHY`) with zero calls
+  to the relay or sent folder; first-ever call (no history) still sends;
+  cadence is configurable and the default is conservative (≥6h); accepted
+  but absent from the sent folder → `FAULT` naming the token; an
+  unreachable attempt still records and throttles the next call; raising
+  relay/sent-folder readers degrade to `UNOBSERVABLE`, never `FAULT`,
+  both directly and through `run_probe`; surface id (`sms:relay`) is
+  stable. Suite now 61/61 (up from 47). `ruff check` and
+  `bpsai-pair arch check --strict` both clean.
+- Did not reuse `deadman.probes.destinations` (the prior session's note in
+  What's Next) — that module is specifically for reading social-platform
+  permalinks (X/Instagram/etc.), and has no relevance to an SMS relay's
+  sent folder. The reusable idea that *did* carry over is the shape of the
+  contract: a weak self-reported "accepted" tier that can never alone
+  produce `HEALTHY`, mirroring Metricool's `Method.REPORTED` scheduler
+  claim.
 
 ### Session: 2026-08-11 — DM1.8 Cloud Run service, blocked on live deploy (`/start-task DM1.8`)
 
@@ -263,12 +311,13 @@ retiring the seven existing point-solution monitors.
    project, then report the deployed URL back so the last two ACs can be
    checked and the task closed. Everything short of that live step is done
    and verified (see Blocker #1 and this session's entry above).
-2. DM1.9 (SMS canary) is unblocked and ready to start. DM1.5 (Gemini
-   diagnosis) is unblocked too and is the P0 hub.
+2. DM1.9 is done. DM1.5 (Gemini diagnosis) is unblocked and is the P0 hub —
+   next natural pickup.
 3. DM1.5's diagnosis layer must handle `UNOBSERVABLE` as a first-class input,
-   not an error case — after DM1.4 the Metricool surface reports it by design.
-4. DM1.9 can reuse `deadman.probes.destinations` rather than re-deriving how to
-   read a destination.
+   not an error case — after DM1.4 and DM1.9, two surfaces now report it by
+   design (opaque platforms, cadence-not-due).
+4. DM1.10 (cross-surface correlation) depends on DM1.3 and DM1.5, not DM1.9 —
+   still blocked until DM1.5 lands.
 5. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
    deploy lands.
 

@@ -1,16 +1,9 @@
 version: 1
-updated_at: '2026-08-11T01:40:07.682055+00:00'
+updated_at: '2026-08-11T01:45:55.746534+00:00'
 last_transition:
-  event: task_blocked
-  at: '2026-08-11T01:40:07.682055+00:00'
-  task_id: DM1.8
-  reason: "\u274C Cannot complete: 2 acceptance criteria item(s) unchecked\n\nUnchecked\
-    \ items:\n  \u25CB **BLOCKED \u2014 cannot verify from this environment.** No\
-    \ `gcloud` CLI, no \n`~/.config/gcloud`, and no GCP project found anywhere on\
-    \ this machine (checked \n`PATH`, Homebrew casks, `~/google-cloud-sdk`). Actual\
-    \ `gcloud builds submit` \nrequires credentials this session does not have. See\
-    \ state.md blockers. \n(non-delivery: no evidence found)\n  \u25CB **BLOCKED \u2014\
-    \ same as above.** Cannot verify a fresh clone reaches a deployed \nU"
+  event: task_done
+  at: '2026-08-11T01:45:55.746534+00:00'
+  task_id: DM1.9
 transitions:
 - event: dispatch
   at: '2026-08-11T00:55:41.784992+00:00'
@@ -46,6 +39,12 @@ transitions:
     \ `gcloud builds submit` \nrequires credentials this session does not have. See\
     \ state.md blockers. \n(non-delivery: no evidence found)\n  \u25CB **BLOCKED \u2014\
     \ same as above.** Cannot verify a fresh clone reaches a deployed \nU"
+- event: dispatch
+  at: '2026-08-11T01:40:08.102147+00:00'
+  task_id: DM1.9
+- event: task_done
+  at: '2026-08-11T01:45:55.746534+00:00'
+  task_id: DM1.9
 tasks:
   DM1.1:
     status: dispatched
@@ -69,3 +68,6 @@ tasks:
       \ `gcloud builds submit` \nrequires credentials this session does not have.\
       \ See state.md blockers. \n(non-delivery: no evidence found)\n  \u25CB **BLOCKED\
       \ \u2014 same as above.** Cannot verify a fresh clone reaches a deployed \nU"
+  DM1.9:
+    status: done
+    updated_at: '2026-08-11T01:45:55.746534+00:00'
