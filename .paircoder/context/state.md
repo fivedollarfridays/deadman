@@ -18,10 +18,11 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, DM1.9 and DM1.10 are `done`. DM1.8 is
-`blocked` on a live GCP deploy step this session cannot perform (see Blockers).
-**DM1.7 (verification loop, P0) is the only unblocked task left**; DM1.11 still
-waits on DM1.8, and DM1.12 waits on everything.
+DM1.1, DM1.2, DM1.3, DM1.4, DM1.5, DM1.6, DM1.7, DM1.9 and DM1.10 are `done`.
+DM1.8 is `blocked` on a live GCP deploy step this session cannot perform (see
+Blockers). DM1.11 still waits on DM1.8; **DM1.12 (integration gate) is the
+only task left that isn't blocked on the GCP deploy**, though it depends on
+all tasks including the blocked DM1.8/DM1.11.
 
 **Spike result that changes the demo:** Instagram and Facebook destinations are
 unreadable, so the Metricool surface is a declared permanent blind spot for
@@ -29,7 +30,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.6, DM1.9 and DM1.10 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.7, DM1.9 and DM1.10 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -39,7 +40,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.4 | Metricool probe + verification spike ✓ | P1 | 35 | claude-opus-5 | DM1.1 |
 | DM1.5 | Diagnosis layer on Gemini via ADK ✓ | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor ✓ | P0 | 35 | claude-opus-5 | DM1.5 |
-| DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
+| DM1.7 | Verification loop ✓ | P0 | 25 | claude-sonnet-5 | DM1.6 |
 | DM1.8 | Cloud Run via Cloud Build ⚠blocked | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.10 | Cross-surface correlation ✓ | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
@@ -57,6 +58,51 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.7 verification loop (`/start-task DM1.7`)
+
+- **The gap this closes:** `ActionResult.performed` (DM1.6) is a fact about
+  the process — the code ran and did not raise. Nothing before this task
+  could tell a caller whether the surface actually recovered.
+  `deadman.remediate.verify.verify_remediation` is the only thing allowed to
+  say "fixed", and it says so on exactly one basis: a fresh
+  `Observation.HEALTHY` from re-running the *same probe* that reported the
+  fault, through the same never-raise `run_probe` contract detection uses.
+- **"Cannot be re-observed" is coded as its own outcome, not folded into
+  success.** If the probe goes blind on re-run, `run_probe` contains the
+  raise as `UNOBSERVABLE`, never `FAULT` — and the loop treats that exactly
+  like any other non-`HEALTHY` result: unverified. Blindness about whether a
+  fix worked gets the same honesty the rest of the project applies to
+  blindness about the original fault.
+- **The probe has to be the one the diagnosis is actually about.**
+  `verify_remediation` checks the probe's surface against the surfaces
+  derived from `diagnosis.evidence_ids` and raises `ValueError` on a mismatch
+  — re-observing an unrelated surface would prove nothing about the fault
+  that was acted on. `test_verifying_against_an_unrelated_surface_is_refused`
+  pins it.
+- **Repeated failure stops rather than looping.** Each attempt re-plans and
+  re-executes against the same diagnosis/evidence (the world can change under
+  the action even though the inputs do not), bounded by `max_attempts`
+  (default 3). Success stops the loop immediately; exhausting the cap without
+  a `HEALTHY` reobservation returns `VerificationStatus.EXHAUSTED`, never an
+  unbounded retry. A third terminal status, `NOT_ATTEMPTED`, covers the case
+  where the executor escalates on the first plan — nothing ran, so there is
+  nothing to re-observe, and the probe is never called.
+- **All four guards mutation-checked** (same discipline as DM1.5/DM1.6/DM1.10,
+  `PYTHONDONTWRITEBYTECODE=1` throughout): the `HEALTHY`-only success check,
+  the `NOT_ATTEMPTED` early-return on escalation, the surface-match
+  validation, and the `max_attempts` cap each broke a specific named test
+  when inverted.
+- Files: `src/deadman/remediate/verify.py`, `tests/test_remediate_verify.py`
+  (8 tests), `docs/ARCHITECTURE.md` (new "The verification loop closes the
+  honesty gap" section).
+- Gates: `pytest tests/` 200/200 (up from 192); `ruff check .` clean;
+  `bpsai-pair arch check --strict` clean.
+- **Not wired into `service.py` yet, same reason as DM1.6/DM1.10.** This is a
+  library call — `verify_remediation(executor, probe, diagnosis, evidence)` —
+  with no call site here because nothing upstream of it (a live executor with
+  real capabilities, a live diagnosis engine) is wired into the endpoint
+  either. DM1.12 is still the integration point that has all three.
 
 ### Session: 2026-08-11 — DM1.10 cross-surface correlation (`/start-task DM1.10`)
 
@@ -523,15 +569,11 @@ retiring the seven existing point-solution monitors.
    satisfy contest eligibility, which requires a real Gemini call. Save the raw
    response into `tests/recorded/` as a genuine capture and retire the authored
    one; nothing in the engine changes, it only ever sees a string.
-2. DM1.6 is done, so **DM1.7 (verification loop) is unblocked** and is the next
-   P0. It is also the intended call site for `deadman.remediate` — nothing
-   imports the executor yet, on purpose. Points to reuse:
-   `Executor.execute(..., dry_run=False)` returns a `Remediation` whose
-   `result.performed` says only that the code ran; the loop must re-run the
-   originating probe and require a fresh `Observation.HEALTHY`.
-   `RemediationPlan.evidence_ids` names the surfaces to re-observe, and
-   `test_an_action_result_does_not_claim_the_fault_is_fixed` pins the field set
-   so no future edit lets the executor declare victory.
+2. DM1.7 is done. `deadman.remediate.verify.verify_remediation(executor,
+   probe, diagnosis, evidence, max_attempts=3)` is ready to be the loop
+   DM1.12 wires in: it takes the same `Executor` and `Diagnosis`/`Evidence`
+   DM1.6 already produces, plus the originating `Probe`, and returns a
+   `VerificationOutcome` (`VERIFIED` / `NOT_ATTEMPTED` / `EXHAUSTED`).
 3. DM1.10 is done. For DM1.12, `deadman.correlate` is the piece the demo wants
    on screen: `Correlator(diagnosis=DiagnosisEngine(client=...)).correlate(
    sweep(probes))` returns incidents, `correlate.report.render` prints the
@@ -540,6 +582,10 @@ retiring the seven existing point-solution monitors.
    unedited take.
 4. DM1.11 (self-liveness) depends on DM1.8 and cannot start until the live
    deploy lands.
+5. DM1.12 (integration gate) is now the only task not blocked by the GCP
+   deploy that hasn't started — though its own AC depends on every task
+   including the blocked DM1.8/DM1.11, so it cannot fully close either until
+   that human-with-GCP-access session happens (see What's Next #1).
 
 ## Blockers
 
