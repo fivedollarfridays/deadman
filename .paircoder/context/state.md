@@ -18,19 +18,23 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-DM1.1, DM1.2, and DM1.3 are `done`. Remaining wave-2 tasks (DM1.4, DM1.8,
+DM1.1, DM1.2, DM1.3, and DM1.4 are `done`. Remaining wave-2 tasks (DM1.8,
 DM1.9) are unblocked and ready to start next.
+
+**Spike result that changes the demo:** Instagram and Facebook destinations are
+unreadable, so the Metricool surface is a declared permanent blind spot for
+Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1 + DM1.2 + DM1.3 `done`
+### Active Sprint (DM1) — 12 tasks, 345 Cx, DM1.1–DM1.4 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM1.1 | Packaging, hermetic test suite, CI ✓ | P0 | 25 | claude-sonnet-5 | — |
 | DM1.2 | Evidence model + probe contract tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
 | DM1.3 | Brief + disk probe tests ✓ | P0 | 20 | claude-sonnet-5 | DM1.1 |
-| DM1.4 | Metricool probe + verification spike | P1 | 35 | claude-opus-5 | DM1.1 |
+| DM1.4 | Metricool probe + verification spike ✓ | P1 | 35 | claude-opus-5 | DM1.1 |
 | DM1.5 | Diagnosis layer on Gemini via ADK | P0 | 40 | claude-opus-5 | DM1.1, DM1.2 |
 | DM1.6 | Remediation registry and executor | P0 | 35 | claude-opus-5 | DM1.5 |
 | DM1.7 | Verification loop | P0 | 25 | claude-sonnet-5 | DM1.6 |
@@ -51,6 +55,53 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM1.4 Metricool probe + verification spike (`/start-task DM1.4`)
+
+- **Spike first, and it came back negative on the primary destination.** Live
+  unauthenticated `curl` against real posts versus fabricated ids, three user
+  agents. The test that mattered was not "does a permalink return 200" but
+  "does the response discriminate present from absent", and for Instagram it
+  does not: a real famous public post and a nonexistent shortcode both return
+  **200** with the same `"pageID":"httpErrorPage"` shell and no `og:` tags. The
+  shortcode in the body is the request URL reflected back. `instagram_oembed`
+  returns the identical 400 "Media Not Found" for the real post without an
+  approved Meta app, and that approval is unavailable — so the API answer is
+  not "harder", it is "no". Facebook returns 400 for everything including real
+  pages. **X discriminates** (200 vs 404, stable over 3 real + 3 fake ids ×2
+  passes and 10 consecutive requests) and its 200 even carries the post text in
+  `og:description`, so it supports content-level confirmation.
+- **Consequence, taken honestly rather than engineered around:** the chosen
+  path is `Method.DESTINATION_PUBLIC` (trust tier 3 of 5) and it only exists
+  for X. Instagram posts yield `UNOBSERVABLE` **forever** — a declared blind
+  spot that gets its own line via `blind_spots()`, which is strictly better
+  than the fabricated `HEALTHY` that let the original FWDAO incident run
+  unnoticed. Both false directions were live and were rejected: keying on
+  status would report every missing post as published, keying on the error
+  marker would report every published post as missing.
+- `src/deadman/probes/destinations.py`: `PLATFORM_VERIFICATION` (X/Twitter
+  verifiable; Instagram, Facebook, Threads, LinkedIn not; unlisted fails
+  closed), `DestinationState`, `DestinationRead` carrying its own `Method`, and
+  `PermalinkReader` with an injected transport. The reader **refuses to fetch an
+  opaque platform** even if wired directly, because `200 → PRESENT` on
+  Instagram manufactures the exact false pass this project exists to catch.
+- `src/deadman/probes/metricool.py`: `MetricoolProbe` verifies every post
+  Metricool reports published. Precedence is tested, not incidental — one
+  confirmed absence carries the batch to `FAULT` naming the post ids (plus
+  `absent_permalinks`); a known fault is not downgraded by blindness on a
+  sibling; one unverified post prevents `HEALTHY` for the batch. A 10-minute
+  propagation grace period keeps a just-published post from being called absent,
+  and an empty schedule is `UNOBSERVABLE`, not healthy.
+- `tests/test_probe_metricool.py`: 20 tests, suite now 39/39 (up from 19).
+  Scheduler and reader both injected, no `allow_network` marker, so zero network.
+- Gates: `ruff check .` clean (two E501s fixed); `bpsai-pair arch check
+  --strict` clean — the first draft tripped "too many functions" (16 > 15) and a
+  file-size warning, which drove the split into `destinations.py` (platform
+  knowledge, reusable by DM1.9's canary) and `metricool.py` (batch reasoning).
+- Follow-ups recorded in the doc: one fetch of a real LinkedIn activity URN
+  settles whether it joins the verifiable set; prefer verifiable destinations on
+  the FWDAO calendar where content allows; re-run the spike before the demo,
+  since every finding is a fact about someone else's server.
 
 ### Session: 2026-08-11 — DM1.3 brief + disk probe tests (`/start-task DM1.3`)
 
@@ -161,8 +212,13 @@ retiring the seven existing point-solution monitors.
 
 ## What's Next
 
-1. DM1.1 and DM1.2 are both `done`. Remaining wave-2 tasks (DM1.3, DM1.4,
-   DM1.8, DM1.9) are unblocked and can proceed.
+1. Wave 2 has DM1.8 (Cloud Run — contest eligibility, retire early) and DM1.9
+   (SMS canary) left; both unblocked. DM1.5 (Gemini diagnosis) is unblocked too
+   and is the P0 hub.
+2. DM1.5's diagnosis layer must handle `UNOBSERVABLE` as a first-class input,
+   not an error case — after DM1.4 the Metricool surface reports it by design.
+3. DM1.9 can reuse `deadman.probes.destinations` rather than re-deriving how to
+   read a destination.
 
 ## Blockers
 
