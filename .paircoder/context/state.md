@@ -64,7 +64,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 5 `done`, 1 `blocked`
+### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 5 `done`, 2 `blocked`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -74,7 +74,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM2.3 | The collector: sweep where the surfaces actually are ✓ | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health ✓ | P0 | 30 | claude-opus-5 | DM2.2 |
 | DM2.5 | Real surfaces, starting with the one already broken ✓ | P0 | 30 | claude-sonnet-5 | DM2.3 |
-| DM2.6 | Scheduled sweeps and scheduled self-check | P0 | 25 | claude-sonnet-5 | DM2.4 |
+| DM2.6 | Scheduled sweeps and scheduled self-check — **blocked** | P0 | 25 | claude-sonnet-5 | DM2.4 |
 | DM2.8 | The board grows a memory | P1 | 25 | claude-sonnet-5 | DM2.6 |
 | DM2.9 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | all |
 
@@ -124,6 +124,72 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-11 — DM2.6 blocked: the scheduled self-check is real, the live infra is not yet touched
+
+New package `src/deadman/scheduled/` (`auth.py`, `endpoint.py`), mirroring
+`deadman.ingest`'s shape but simpler — there is no body to authenticate, only
+a trigger, so it's a bearer token compared with `hmac.compare_digest` rather
+than an HMAC-over-bytes scheme. `DEADMAN_SCHEDULER_SECRET` is mandatory at
+import, same doctrine as `DEADMAN_INGEST_SECRET`: a missing secret is a
+refusal, not a default, because a public endpoint that triggers work is a
+free denial-of-service.
+
+`src/deadman/self_check.py` gained `SelfEvidenceSink` (a `Protocol` both the
+old filesystem log and the new store-backed one satisfy — `self_check()` and
+`run_self_check()` needed no behavior change, just a broadened type hint) and
+`StoreSelfEvidenceLog`, which writes through the DM2.1
+`EvidenceStore` on surface `self:sweep` instead of a per-instance file. This
+is what retires DM1.11's stated cold-start limitation: a fresh Cloud Run
+instance shares no filesystem with the one that swept before it, but it does
+share the store.
+
+`ScheduledSelfCheckEndpoint.handle` (in the new package) checks the secret,
+reads the *prior* row's liveness before writing a new one — checking after
+writing would always read LIVE, since the row just written is by
+construction fresh, and a self-check that cannot fail proves nothing — then
+sweeps `default_probes()` and records through the store. Wired into
+`deadman.service.build_app` via `default_scheduled`, alongside the existing
+`ingest` and `liveness_fn` optional endpoints on `make_app`.
+
+**Reducing import count paid for the wiring.** Adding two new `from`-imports
+to `service.py` tripped `arch check --strict`'s "more than 20 imports"
+threshold (`21 > 20`). Fixed by importing `deadman.scheduled` as a namespace
+(`from deadman import scheduled as scheduled_pkg`) rather than importing
+each name separately — one import statement instead of two, and it also
+sidesteps a real shadowing bug the alias route would have hit: `make_app`'s
+own parameter is named `scheduled`, so `from deadman.scheduled import
+ScheduledSelfCheckEndpoint` inside that function's closure would have made
+`scheduled.handle(...)` resolve to the *parameter* (the endpoint instance),
+not the module, the moment both were in scope with the same name.
+
+34 new tests across four files (`test_scheduled_auth.py`,
+`test_self_check_store.py`, `test_service_schedule.py`,
+`test_scheduled_startup.py`), all passing on first run against the
+implementation — the design was worked out from reading the existing
+`ingest`/`self_check`/`store` modules closely enough that the auth,
+routing, and cold-start-survival tests needed no iteration.
+`test_service_schedule.py::TestSelfEvidenceSurvivesACleanReadFromAnotherInstance`
+is the AC5 proof: two independently-built `make_app` instances, each with
+its own `ScheduledSelfCheckEndpoint` and `StoreSelfEvidenceLog`, sharing
+nothing but one `InMemoryEvidenceStore` — the second instance never received
+the first's request, and still reads `liveness_before: "live"` off the
+row the first one wrote.
+
+**Blocked on two ACs, not done: enabling Cloud Scheduler and verifying a
+fired job.** See Blocker 5. This sandboxed worktree has no `gcloud` CLI
+(`command not found`) and no ADC (`~/.config/gcloud` absent), discovered
+before writing `infra/scheduler.md` rather than assumed. Every command that
+touches the live project — API enable, secret provisioning, job creation,
+the trigger-and-read-back verification via `FirestoreEvidenceStore` — is
+written out exactly and reproducibly in `infra/scheduler.md`, following the
+same "runbook nobody has executed is a hypothesis" discipline DM1.8 and
+DM2.7 already paid for, but not run. `bpsai-pair task update DM2.6 --status
+done` correctly refused on the two unchecked items; set to `blocked` rather
+than forced through. Every other AC is checked off with evidence in
+`.paircoder/tasks/DM2.6.task.md`. Gates: `pytest -n auto --dist=worksteal`
+528/528, `ruff check .` and `ruff format --check .` clean, `bpsai-pair arch
+check --strict` clean.
 
 ### Session: 2026-08-11 — DM2.5 done: real surfaces, one already broken
 
@@ -1157,26 +1223,42 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2).** DM2.1, DM2.2, DM2.3, DM2.4 and DM2.5 are done. **DM2.7 is blocked**, not on
-code — every piece it needed to build is written, tested and mutation-checked
-— but on a real, working SMTP account to send through: `ops/.env`'s SMTP
-block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real sends
-will fail at connect`), and ops's own alertmanager and `T152` backlog item
-confirm email delivery isn't live there yet either. **Unblocking it needs a
-human decision, not more code**: either wait on ops's `T152` (outbound email
-rail) to land, or point `DEADMAN_ALERT_*` at any other working SMTP account
-(a personal Gmail app password would do) and run the one-time verification
-script in `docs/alerting.md`'s last section. Once that one AC is checked,
-`bpsai-pair task update DM2.7 --status done` should pass on the first try —
-everything else is already checked off. **DM2.4 done unblocks DM2.6**
-(scheduling), which is next — neither depends on DM2.7, so the sprint is not
-stalled by this.
+**Now (DM2).** DM2.1, DM2.2, DM2.3, DM2.4 and DM2.5 are done. **DM2.6 and
+DM2.7 are both blocked**, and both for the same shape of reason: the code is
+done, tested and gate-clean, and what's missing is a human running a runbook
+against live external state this sandboxed environment cannot reach. See
+Blockers 4 and 5.
 
-DM2.6 inherits one change from DM2.5 worth flagging: `infra/collector/
+**DM2.7** needs a real, working SMTP account to send through: `ops/.env`'s
+SMTP block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real
+sends will fail at connect`), and ops's own alertmanager and `T152` backlog
+item confirm email delivery isn't live there yet either. Either wait on
+ops's `T152` (outbound email rail) to land, or point `DEADMAN_ALERT_*` at any
+other working SMTP account and run the one-time verification script in
+`docs/alerting.md`'s last section.
+
+**DM2.6** needs a machine with `gcloud` authenticated for `deadman-20260810`
+— this environment has no `gcloud` CLI at all. `infra/scheduler.md` has the
+exact, reproducible commands: enable the Cloud Scheduler API, generate and
+set `DEADMAN_SCHEDULER_SECRET` on the live Cloud Run service, create the
+job, then trigger it once by hand and read the `self:sweep` row back through
+`FirestoreEvidenceStore` to prove it actually fired. **Do this before the
+next redeploy** — `deadman.service` now refuses to import without
+`DEADMAN_SCHEDULER_SECRET`, so a build that lands before the variable is set
+on the live service takes it down.
+
+DM2.8 depends on DM2.6, and DM2.6's code (the `service.py` changes, the
+store-backed self-check, the routing) is real and gate-green now even though
+the task itself is `blocked` on the two live-infra ACs above — whether
+`engage`'s dependency resolution treats a `blocked` upstream task as
+sufficient for DM2.8 to start, or waits for `done`, was not checked this
+session and should be confirmed before assuming DM2.8 can proceed.
+
+DM2.6 inherited one change from DM2.5 worth flagging: `infra/collector/
 collectors.example.json` now declares **two** collectors (`kevin-mac` and
-`kevin-rig`), not one — whatever DM2.6 does with `DEADMAN_COLLECTORS` on the
-deployed service should keep pointing at that same file rather than
-special-casing the Mac.
+`kevin-rig`), not one — `DEADMAN_COLLECTORS` on the deployed service should
+keep pointing at that same file rather than special-casing the Mac. This
+session did not need to touch it.
 
 What DM2.6 inherits from DM2.4, and must not undo:
 
@@ -1348,6 +1430,39 @@ verification is the one-time script at the end of `docs/alerting.md` — run
 it, confirm the message lands, check the AC box, then `bpsai-pair task update
 DM2.7 --status done` should pass immediately since nothing else is
 outstanding.
+
+**5. DM2.6's two live-infra ACs — needs a machine with `gcloud`, not more
+code.** Every code AC is done: `POST /self-check` (`src/deadman/scheduled/`),
+bearer-token auth mandatory at import (mirrors `DEADMAN_INGEST_SECRET`),
+self-check evidence written through the DM2.1 store via
+`StoreSelfEvidenceLog` (`src/deadman/self_check.py`), a test proving a second,
+independently-built app instance reads what the first wrote (cold-start
+survival), and the collector-vs-Cloud-Scheduler independence documented in
+`infra/scheduler.md`. `pytest` 528/528, `ruff` clean both ways, `arch check
+--strict` clean.
+
+The two ACs this session could not close: **enabling the Cloud Scheduler API
+and creating the job**, and **verifying the job fired at least once via a
+stored row**. This sandboxed worktree has no `gcloud` CLI at all (`gcloud`:
+command not found) and no Application Default Credentials
+(`~/.config/gcloud` does not exist) — the same class of gap DM1.8's original
+deploy blocker named ("a runbook nobody has executed is a hypothesis"), this
+time because the tool itself is absent rather than the credential. Both ACs
+have exact, reproducible commands written in `infra/scheduler.md` (API
+enable, secret generation and `--update-env-vars`, `gcloud scheduler jobs
+create http`, then `gcloud scheduler jobs run` plus a `FirestoreEvidenceStore`
+read-back of the `self:sweep` surface to prove the row landed).
+
+**Not overridden — needs one of two decisions:** run `infra/scheduler.md`'s
+commands from a machine with `gcloud` authenticated for `deadman-20260810`
+(the rig, per DM1.8's precedent — that deploy also had to run from the rig
+because this environment lacked the tooling), or grant this environment
+`gcloud` + ADC access. **One deploy-ordering hazard to act on before either
+happens:** `deadman.service` now refuses to import without
+`DEADMAN_SCHEDULER_SECRET` set, so the *next* `gcloud builds submit` must not
+land until that variable is set on the live Cloud Run service via
+`infra/scheduler.md`'s step 1 — merging this branch and redeploying before
+setting it would take the currently-live service down entirely.
 <!-- paircoder:state:end -->
 ## Quick Commands
 
