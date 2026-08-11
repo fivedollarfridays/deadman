@@ -1,0 +1,24 @@
+id: plan-2026-08-dm1-deadman-v1
+title: Dm1 Deadman V1
+type: feature
+status: in_progress
+created_at: '2026-08-11T00:38:21.523231+00:00'
+skills:
+- planning-with-pm
+phases:
+- id: 1
+  tasks:
+  - DM1.1
+  - DM1.2
+  - DM1.3
+  - DM1.4
+  - DM1.8
+  - DM1.9
+  - DM1.5
+  - DM1.11
+  - DM1.6
+  - DM1.10
+  - DM1.7
+  - DM1.12
+metadata:
+  source_backlog: plans/backlogs/DM1-deadman-v1.md
