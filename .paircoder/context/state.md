@@ -125,6 +125,55 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+### Session: 2026-08-11 — DM2 merged (PR #7) after closing ten security findings
+
+**The sprint shipped seven of nine tasks, and the security gate was right to
+block the first attempt.** All thirteen audit findings were verified against
+the branch before any were acted on; **none was a false positive**, which is
+worth recording because the usual triage result is mostly noise. Ten are
+fixed, four deferred to DM3 with stated reasons.
+
+The two that mattered most were the two the auditor named regardless of its
+own severity ranking:
+
+- **`read_at` had no upper bound.** `_judge_surface` asked only whether age
+  *exceeded* the silence window, so a future-dated row had negative age, never
+  went stale, and — because the store orders by `read_at` — also stayed newest
+  forever. A single collector with a forward-skewed clock permanently disarmed
+  the staleness detection this entire sprint exists to build. No attacker
+  required. Now refused at the wire and judged `UNOBSERVABLE` rather than fresh
+  for rows already stored.
+- **The public board republished the estate.** `GET /` is
+  `--allow-unauthenticated` with a published URL, and `_evidence_row` emitted
+  `detail` and `source` verbatim: collector absolute paths, collector id,
+  arrival times. `deadman.redact` now gates on the *shape* of a value rather
+  than a key allowlist, because an allowlist fails open the first time a probe
+  adds a key nobody classified. Withheld keys are named, not silently dropped.
+
+**One design decision worth carrying forward:** the client-identity guard
+(finding #6) lives at the wire, not at annotation. `on_arrival` deliberately
+*preserves* `wire_row_id`/`reported_method` when present, so re-annotating
+cannot launder a relayed row into a fresh one — and that preservation is only
+safe because `decode_row` now strips every service-owned key from untrusted
+input. Fixing it at the annotation site instead would have broken the
+laundering guard, which is what the existing test caught.
+
+`verify/surface_verdict.py` was split out of `collector_liveness.py` because
+the new guard pushed it past the 200-line arch cap. Split on the seam the file
+had actually grown rather than trimming prose to duck the gate.
+
+Gates: **568 passed** (up from 528), ruff clean both ways, `arch check
+--strict` clean over every tracked file, CI green, merged to `main` at
+`4b2666e`.
+
+**⚠ THE DEPLOY DID NOT FOLLOW THE MERGE.** `gcloud` is not present on this Mac
+*or* on the rig (both checked), so the live service at
+https://deadman-mrapac5nda-uc.a.run.app is **still running DM1 code**. None of
+DM2 is live: no ingest endpoint, no durable store, no board redaction. The
+deployed image tag is now stale against `main`, which is exactly the condition
+the handoff warns about. **This is the first thing the next session should
+fix**, and it needs an operator with gcloud installed and authenticated.
+
 ### Session: 2026-08-11 — DM2.6 blocked: the scheduled self-check is real, the live infra is not yet touched
 
 New package `src/deadman/scheduled/` (`auth.py`, `endpoint.py`), mirroring
