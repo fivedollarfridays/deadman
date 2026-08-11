@@ -26,6 +26,11 @@ jobs:
       - name: ruff check
         run: ruff check .
 
+      # Separate from `ruff check`, which does not police formatting. Without
+      # this step 16 source files drifted out of format while CI stayed green.
+      - name: ruff format --check
+        run: ruff format --check .
+
       - name: arch check --strict
         run: |
           pip install bpsai-pair==2.42.0

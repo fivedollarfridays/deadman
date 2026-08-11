@@ -129,8 +129,7 @@ class PermalinkReader:
     def read(self, platform: str, permalink: str | None) -> DestinationRead:
         if verification_method(platform) is None:
             return self._unreadable(
-                f"{platform} destinations are not readable "
-                f"(see docs/metricool-verification.md)",
+                f"{platform} destinations are not readable (see docs/metricool-verification.md)",
                 platform=platform,
             )
         if not permalink:

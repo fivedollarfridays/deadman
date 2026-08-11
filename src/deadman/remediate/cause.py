@@ -106,8 +106,14 @@ _TOKENS: tuple[tuple[Cause, tuple[str, ...]], ...] = (
     (Cause.CHANNEL_DISCONNECTED, ("disconnected", "not_connected", "channel_removed", "revoked")),
     (
         Cause.EXPIRED_CREDENTIAL,
-        ("token_expired", "token expired", "expired_token", "invalid_grant", "unauthorized",
-         "credential"),
+        (
+            "token_expired",
+            "token expired",
+            "expired_token",
+            "invalid_grant",
+            "unauthorized",
+            "credential",
+        ),
     ),
     (
         Cause.RESOURCE_EXHAUSTION,

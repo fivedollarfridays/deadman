@@ -155,9 +155,7 @@ def test_an_unavailable_diagnosis_escalates_and_never_acts():
     diagnosis = DiagnosisEngine(client=RaisingClient()).diagnose(bundle)
     assert diagnosis.status is DiagnosisStatus.UNAVAILABLE
 
-    plan = Executor(registry=default_registry(), capabilities=FULLY_CAPABLE).plan(
-        diagnosis, bundle
-    )
+    plan = Executor(registry=default_registry(), capabilities=FULLY_CAPABLE).plan(diagnosis, bundle)
     assert plan.decision is Decision.ESCALATE
     assert plan.action is None
 
@@ -169,9 +167,7 @@ def test_cited_evidence_that_was_not_supplied_escalates():
     diagnosis, evidence = diagnose("grounded-transient-5xx")
     other = [e for e in evidence if e.surface != "metricool:api/publish"]
 
-    plan = Executor(registry=default_registry(), capabilities=FULLY_CAPABLE).plan(
-        diagnosis, other
-    )
+    plan = Executor(registry=default_registry(), capabilities=FULLY_CAPABLE).plan(diagnosis, other)
     assert plan.decision is Decision.ESCALATE
     assert "not supplied" in plan.reason
 

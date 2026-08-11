@@ -38,9 +38,7 @@ def test_a_5xx_is_a_transient_upstream_cause():
 
 
 def test_an_expired_token_is_a_credential_cause_not_a_transient_one():
-    assert classify([ev(http_status=401, error_code="token_expired")]) is (
-        Cause.EXPIRED_CREDENTIAL
-    )
+    assert classify([ev(http_status=401, error_code="token_expired")]) is (Cause.EXPIRED_CREDENTIAL)
 
 
 # --- the closed set of signals -------------------------------------------

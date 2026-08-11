@@ -2,12 +2,18 @@
 # and `docker push` below run on Cloud Build's own workers, not this
 # machine's. Submit with:
 #   gcloud builds submit --config cloudbuild.yaml .
+#
+# The image reference is spelled out in each step rather than assembled into
+# a single _IMAGE substitution. Cloud Build expands substitutions in step
+# args and in `images:`, but NOT inside another substitution's default value,
+# so a default of `gcr.io/${PROJECT_ID}/deadman:latest` reaches the builder
+# as that literal string and fails to parse as an image name.
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${_IMAGE}', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/deadman:$_TAG', '.']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_IMAGE}']
+    args: ['push', 'gcr.io/$PROJECT_ID/deadman:$_TAG']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -15,19 +21,21 @@ steps:
       - run
       - deploy
       - '${_SERVICE}'
-      - --image=${_IMAGE}
+      - --image=gcr.io/$PROJECT_ID/deadman:$_TAG
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
       - --quiet
 
 images:
-  - '${_IMAGE}'
+  - 'gcr.io/$PROJECT_ID/deadman:$_TAG'
 
+# Every key here is referenced by a step above. Cloud Build rejects the whole
+# config for a substitution that is declared and never used.
 substitutions:
   _SERVICE: deadman
   _REGION: us-central1
-  _IMAGE: gcr.io/${PROJECT_ID}/deadman:${SHORT_SHA}
+  _TAG: latest
 
 options:
   logging: CLOUD_LOGGING_ONLY

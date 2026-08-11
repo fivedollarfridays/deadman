@@ -112,8 +112,6 @@ def verify_remediation(
         reobservation = run_probe(probe)
         attempts.append(Attempt(remediation=remediation, reobservation=reobservation))
         if reobservation.observation is Observation.HEALTHY:
-            return VerificationOutcome(
-                status=VerificationStatus.VERIFIED, attempts=tuple(attempts)
-            )
+            return VerificationOutcome(status=VerificationStatus.VERIFIED, attempts=tuple(attempts))
 
     return VerificationOutcome(status=VerificationStatus.EXHAUSTED, attempts=tuple(attempts))

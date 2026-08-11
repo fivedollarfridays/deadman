@@ -41,6 +41,48 @@ gcloud builds submit --config cloudbuild.yaml \
   --substitutions=_SERVICE=deadman,_REGION=us-central1 .
 ```
 
+The default tag is `latest`. To deploy an identifiable revision, override
+`_TAG`:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_TAG=$(date +%Y%m%d-%H%M%S) .
+```
+
+### Why the image reference is spelled out in every step
+
+`cloudbuild.yaml` repeats `gcr.io/$PROJECT_ID/deadman:$_TAG` in each step
+rather than assembling it once into an `_IMAGE` substitution. That is
+deliberate, and both halves of the reason cost a failed build to learn.
+
+Cloud Build expands substitutions in step args and in `images:`, but **not
+inside another substitution's default value.** An `_IMAGE` defaulting to
+`gcr.io/${PROJECT_ID}/deadman:latest` reaches the builder as that literal
+string and dies on `could not parse reference`. Nesting a `${_TAG}` inside
+`_IMAGE` fails differently and earlier: `_TAG` then appears nowhere the
+config recognizes as a use, and Cloud Build rejects any substitution that is
+declared and never referenced.
+
+`SHORT_SHA` is no help either. It is a built-in that populates only for
+trigger-based builds, and built-ins cannot be passed to a manual submit.
+
+## Grant public access
+
+The `--allow-unauthenticated` flag in the deploy step is **not sufficient on
+its own.** Cloud Build's default service account can deploy a revision without
+necessarily holding permission to set the service's IAM policy, and when it
+lacks that permission the deploy still reports SUCCESS while every request
+gets a `403 Forbidden` from the Google frontend, before it ever reaches the
+container. Green build, unreachable service, no error anywhere connecting the
+two. Bind the invoker role once, with your own credentials:
+
+```bash
+gcloud run services add-iam-policy-binding deadman \
+  --region=us-central1 --member=allUsers --role=roles/run.invoker
+```
+
+The binding survives redeploys, so this is one-time per service.
+
 ## Find the URL
 
 ```bash
@@ -78,6 +120,14 @@ service to light that surface up:
 gcloud run services update deadman --region=us-central1 \
   --set-env-vars=DEADMAN_BRIEF_LOG=/path/inside/the/container/to/the/log
 ```
+
+Read `host:disk/` on this deployment with the same suspicion. Inside Cloud
+Run it measures the container's own ephemeral filesystem, which starts
+effectively empty and reports something close to 100% free on every cold
+start. That number is true and useless: the volume this probe was written
+about is a workstation's, and no container can see it. The hosted board is a
+demonstration surface. Trending a real host means running the probe on that
+host and shipping its evidence here, which is v2.
 
 ## Configuration
 

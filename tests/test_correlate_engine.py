@@ -23,9 +23,7 @@ CASCADE = "bundle-disk-cascade"
 #: scheme ever drifts out from under these recordings they would keep passing
 #: for entirely the wrong reason — proving only that a broken citation is
 #: rejected, which is another layer's test.
-GROUNDED_OR_VACUOUS = (
-    "fixture must be grounded, or this asserts nothing about correlation"
-)
+GROUNDED_OR_VACUOUS = "fixture must be grounded, or this asserts nothing about correlation"
 
 
 def correlate(recording: str, evidence=None):

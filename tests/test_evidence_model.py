@@ -40,9 +40,7 @@ def test_provenance_row_returns_source_method_surface_and_iso_timestamp() -> Non
 
 
 def test_unobservable_records_the_reason_in_detail() -> None:
-    evidence = unobservable(
-        "host:disk/", "statvfs:/", "cannot stat volume: permission denied"
-    )
+    evidence = unobservable("host:disk/", "statvfs:/", "cannot stat volume: permission denied")
 
     assert evidence.observation is Observation.UNOBSERVABLE
     assert evidence.detail["reason"] == "cannot stat volume: permission denied"

@@ -50,10 +50,7 @@ class MorningBriefProbe:
 
     @property
     def question(self) -> str:
-        return (
-            f"was a morning brief verifiably sent within the last "
-            f"{self.window_hours:g}h?"
-        )
+        return f"was a morning brief verifiably sent within the last {self.window_hours:g}h?"
 
     def observe(self) -> Evidence:
         src = str(self.log_path)
@@ -62,9 +59,7 @@ class MorningBriefProbe:
             return self._missing_log_result(src)
 
         try:
-            rows = [
-                ln for ln in self.log_path.read_text().splitlines() if ln.strip()
-            ]
+            rows = [ln for ln in self.log_path.read_text().splitlines() if ln.strip()]
         except OSError as exc:
             return unobservable(SURFACE, src, f"cannot read log: {exc}")
 
@@ -104,9 +99,7 @@ class MorningBriefProbe:
                 last_send_at=None,
                 age_hours=None,
             )
-        return unobservable(
-            SURFACE, src, "log directory does not exist (path misconfigured?)"
-        )
+        return unobservable(SURFACE, src, "log directory does not exist (path misconfigured?)")
 
     def _age_result(self, last_send: datetime, row_count: int, src: str) -> Evidence:
         now = datetime.now(timezone.utc)
@@ -133,8 +126,7 @@ class MorningBriefProbe:
         if age_h > self.window_hours:
             missed = int(age_h // 24)
             return self._fault(
-                f"no brief sent in {age_h:.1f}h "
-                f"(window {self.window_hours:g}h, ~{missed} missed)",
+                f"no brief sent in {age_h:.1f}h (window {self.window_hours:g}h, ~{missed} missed)",
                 src,
                 **detail,
             )

@@ -42,9 +42,9 @@ def basis_note(incident: Incident) -> str:
 
 
 def _citation_lines(incident: Incident) -> list[str]:
-    return [
-        f"  {c.evidence_id}  {c.quote!r}" for c in incident.diagnosis.citations
-    ] or ["  (none — the claim rests on nothing that survived grounding)"]
+    return [f"  {c.evidence_id}  {c.quote!r}" for c in incident.diagnosis.citations] or [
+        "  (none — the claim rests on nothing that survived grounding)"
+    ]
 
 
 def render(incident: Incident) -> str:

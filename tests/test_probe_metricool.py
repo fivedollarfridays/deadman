@@ -227,9 +227,7 @@ def test_a_confirmed_absence_outranks_an_unreadable_sibling() -> None:
     """We did learn this surface is broken. The blindness on the sibling is
     recorded in the detail rather than downgrading a known fault."""
     posts = [_post(post_id="gone"), _post(post_id="murky")]
-    reader = _PerPostReader(
-        {"gone": DestinationState.ABSENT, "murky": DestinationState.UNREADABLE}
-    )
+    reader = _PerPostReader({"gone": DestinationState.ABSENT, "murky": DestinationState.UNREADABLE})
     probe = MetricoolProbe(brand="fwtx_dao", scheduler=_Scheduler(posts), reader=reader)
 
     evidence = probe.observe()
@@ -241,9 +239,7 @@ def test_a_confirmed_absence_outranks_an_unreadable_sibling() -> None:
 
 def test_one_unverified_post_prevents_a_healthy_verdict_for_the_batch() -> None:
     posts = [_post(post_id="ok"), _post(post_id="blind")]
-    reader = _PerPostReader(
-        {"ok": DestinationState.PRESENT, "blind": DestinationState.UNREADABLE}
-    )
+    reader = _PerPostReader({"ok": DestinationState.PRESENT, "blind": DestinationState.UNREADABLE})
     probe = MetricoolProbe(brand="fwtx_dao", scheduler=_Scheduler(posts), reader=reader)
 
     evidence = probe.observe()
