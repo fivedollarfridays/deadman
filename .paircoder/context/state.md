@@ -18,9 +18,9 @@ Submission target: All Things Agentic, Taskmaster category, **deadline
 
 ## Current Focus
 
-Ten of twelve tasks are `done`, DM1.8 included. **The GCP blocker is gone and
-nothing is blocked on credentials any more.** Only DM1.11 (self-liveness) and
-DM1.12 (integration gate) remain, and both are ready to start.
+Eleven of twelve tasks are `done`. **The GCP blocker is gone and nothing is
+blocked on credentials any more.** Only DM1.12 (integration gate) remains, and
+every one of its dependencies is satisfied.
 
 **The service is live and public** at https://deadman-mrapac5nda-uc.a.run.app
 (project `deadman-20260810`). `GET /` returns the board.
@@ -37,7 +37,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM1) — 12 tasks, 345 Cx, 10 `done`, DM1.11 and DM1.12 open
+### Active Sprint (DM1) — 12 tasks, 345 Cx, 11 `done`, DM1.12 open
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
@@ -51,7 +51,7 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 | DM1.8 | Cloud Run via Cloud Build ✓ | P0 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.9 | SMS relay probe with active canary ✓ | P1 | 30 | claude-sonnet-5 | DM1.1 |
 | DM1.10 | Cross-surface correlation ✓ | P1 | 30 | claude-opus-5 | DM1.3, DM1.5 |
-| DM1.11 | Self-liveness + out-of-band alerting | P1 | 25 | claude-sonnet-5 | DM1.8 |
+| DM1.11 | Self-liveness + out-of-band alerting ✓ | P1 | 25 | claude-sonnet-5 | DM1.8 |
 | DM1.12 | Integration gate: demo, README, diagram | P0 | 30 | claude-opus-5 | all |
 
 **Waves:** `DM1.1` → `DM1.2 DM1.3 DM1.4 DM1.8 DM1.9` → `DM1.5 DM1.11` →
@@ -65,6 +65,44 @@ Out of scope for DM1 (v2): general surface registry, multi-brand support,
 retiring the seven existing point-solution monitors.
 
 ## What Was Just Done
+
+### Session: 2026-08-10 — DM1.11 self-liveness and out-of-band alerting
+
+Eleven of twelve done. Built TDD across nine red-green cycles.
+
+`src/deadman/self_check.py` proves liveness from a row appended *after* a
+sweep completes, never from a heartbeat or a process start. The timestamp is
+read from inside the row rather than from file mtime, same lesson as the
+morning brief probe. That test was mutation-checked: swapping `latest()` for
+the naive `os.path.getmtime` version fails it, so it has teeth rather than
+passing by construction.
+
+Three liveness states, not two. `NO_EVIDENCE` is deliberately distinct from
+`STALE`, because "it stopped" and "it never started, or we are pointed at the
+wrong path" call for different responses, and both exit non-zero. Treating no
+data as nothing to report is exactly how a monitor goes quiet unnoticed.
+
+`src/deadman/remediate/alert.py` refuses at construction to sit on a rail
+deadman watches, and refuses the whole rail rather than the exact id: with
+`sms:relay` monitored, `sms:backup-number` is the same physical path with a
+different destination and dies at the same moment. Checked at startup because
+when the alarm is needed, the channel is as likely to be down as the thing it
+would report. That is the nine-day outage as a constraint: nobody ignored an
+alert, there was no alert.
+
+Wired into the service so it is real rather than theoretical. A served board
+records self evidence; a rejected 405 does not, since a stream of bad requests
+must not forge liveness for a service whose probes never ran. Added a
+`[project.scripts]` console entry point, so "exits non-zero" was verified as a
+property of a command a scheduler runs: `deadman-self-check` exits 1 on stale,
+1 on no-evidence, 0 on live, checked as real processes.
+
+**Known limitation, stated in `default_self_log` rather than left to be
+found:** Cloud Run's filesystem is per-instance, so this proves an instance's
+liveness, not the service's across cold starts. Durable self-evidence is v2.
+
+Gates: 222 passed (up from 212), `ruff check` and `ruff format --check` clean,
+`arch check --strict` clean on both new modules.
 
 ### Session: 2026-08-10 — DM1.8 deployed live, and the Gemini path proven
 
@@ -641,12 +679,19 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
    operator-facing text and `as_dict` the board row. It is the only layer that
    visibly does something a graph-based monitor cannot, so it belongs in the
    unedited take.
-4. **DM1.11 (self-liveness) is unblocked and is the next task to run.** DM1.8
-   is done, so its dependency is satisfied. Note for whoever takes it: the
-   deployed service is the thing whose liveness must be proven from capture
-   evidence, and its alert path must not route through any monitored surface.
-5. DM1.12 (integration gate) is the last task. Every dependency is now `done`,
-   so it can close for real rather than partially.
+4. **DM1.11 is done.** `deadman-self-check` is the scheduler-facing command;
+   `run_self_check(log, window_hours, channel)` is the callable, and
+   `AlertChannel(transport, send, monitored)` is what DM1.12 must construct
+   with the real monitored-surface list so the demo's alarm is genuinely out
+   of band.
+5. **DM1.12 (integration gate) is the only task left, and every dependency is
+   `done`, so it can close for real rather than partially.** Three things it
+   should pick up that are known and unresolved: the `tests/recorded/`
+   fixtures are still authored rather than real Gemini captures; the deployed
+   service's self-evidence does not survive a cold start (per-instance
+   filesystem); and the live demo must run unedited per the rules, so the
+   break-and-heal sequence needs rehearsing end to end against the deployed
+   URL, not locally.
 
 ## Blockers
 
