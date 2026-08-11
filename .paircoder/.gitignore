@@ -1,0 +1,10 @@
+# Runtime artifacts — do not commit
+.cli_version
+cache/**
+feedback/**
+history/benchmarks/matrix/**
+hooks/**
+reviews/**
+telemetry/**
+data/
+history/

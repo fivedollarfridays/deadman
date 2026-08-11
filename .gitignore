@@ -1,0 +1,30 @@
+.venv/
+.venv-experimental/
+__pycache__/
+*.pyc
+agent_pack.tgz
+*.bak
+
+# PairCoder — ephemeral/session data
+.claude/settings.local.json
+.paircoder/.cli_version
+.paircoder/cache/**
+.paircoder/feedback/**
+.paircoder/history/benchmarks/matrix/**
+.paircoder/hooks/**
+.paircoder/reviews/**
+.paircoder/telemetry/**
+.paircoder/data/
+.paircoder/history/
+.claude/
+
+# >>> paircoder managed
+.claude/settings.local.json
+.paircoder/.cli_version
+.paircoder/cache/**
+.paircoder/feedback/**
+.paircoder/history/benchmarks/matrix/**
+.paircoder/hooks/**
+.paircoder/reviews/**
+.paircoder/telemetry/**
+# <<< paircoder managed
