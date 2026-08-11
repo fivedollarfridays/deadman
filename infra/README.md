@@ -255,6 +255,78 @@ Expected replies: `200` with `{"stored": n, "duplicates": m}`; `401` for a
 missing, wrong or stale signature; `400` for a body that is not a valid batch;
 `413` for a body over 256 KiB. Nothing is stored on any of the failures.
 
+## The collector
+
+The board's own probes can only see the container they run in (see
+"Ingest" above). `src/deadman/collector/` is the process that runs on a
+real machine, sweeps whatever probes a config file names, signs the result
+in the DM2.2 wire format, and posts it here. Nothing about *which* probes
+run is compiled into the collector — see `src/deadman/collector/config.py`
+and `infra/collector/collector.example.json` — so pointing it at a new
+surface on a new machine is a new config file, never a new build.
+
+### Store-and-forward
+
+A batch the collector could not deliver — the service unreachable, a
+non-200 reply — is written to `spool_dir` (from the config file) rather than
+discarded, and a later run resends it before attempting its own fresh
+sweep, oldest first. The spool is a directory on disk, not process state, so
+it survives a crash or a reboot with nothing extra to configure. Every
+resend is signed fresh, at the moment it is actually sent — see
+`src/deadman/collector/run.py`'s module docstring for why reusing the
+original signature would make an honest retry look like a stale replay.
+
+### Try it before it ships anything
+
+```bash
+deadman-collector --config infra/collector/collector.example.json --dry-run
+```
+
+Prints the exact batch a real run would ship — every row from every
+configured probe, signed-envelope shape and all — and makes **zero** network
+calls. This is the thing to run first on a new machine, before the config
+is trusted with a real ingest URL.
+
+### Installing the collector on a Mac
+
+Prerequisites: the package installed somewhere `python3` can import it
+(`pip install .` or `pip install -e .` from a clone of this repo), a config
+file (copy `infra/collector/collector.example.json` and point its two paths
+at real files on this machine), and the same `DEADMAN_INGEST_SECRET` value
+the deployed service uses.
+
+The secret is never written into the plist or committed anywhere — it is
+sourced from `~/.deadman/collector-env.sh` at run time, the same rule
+`tests/test_ingest_startup.py::TestNothingSecretIsCommitted` already
+enforces on the service side:
+
+```bash
+mkdir -p ~/.deadman
+cat > ~/.deadman/collector-env.sh <<'EOF'
+export DEADMAN_INGEST_SECRET="the same value the Cloud Run service has"
+EOF
+chmod 600 ~/.deadman/collector-env.sh
+```
+
+Then materialize `infra/launchd/com.deadman.collector.plist` with real paths
+and load it — one command:
+
+```bash
+sed \
+  -e "s#__DEADMAN_COLLECTOR_BIN__#$(command -v deadman-collector)#" \
+  -e "s#__DEADMAN_COLLECTOR_CONFIG__#$PWD/infra/collector/collector.example.json#" \
+  infra/launchd/com.deadman.collector.plist > ~/Library/LaunchAgents/com.deadman.collector.plist \
+  && launchctl load ~/Library/LaunchAgents/com.deadman.collector.plist
+```
+
+launchd now runs the collector every 15 minutes (`StartInterval`, see the
+plist's own comment for why not a calendar interval) and once immediately
+(`RunAtLoad`). Logs land at `/tmp/deadman/collector.log`. To stop it:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.deadman.collector.plist
+```
+
 ## Local verification without GCP
 
 The Dockerfile can be built and run with any local Docker daemon to sanity

@@ -14,6 +14,10 @@ dependencies = []
 # nothing but the exit status. Giving it a real console entry point is what
 # makes "exits non-zero" a property of a command rather than of a function.
 deadman-self-check = "deadman.self_check:main"
+# Same reasoning for the collector: it is meant to be run by launchd
+# (infra/launchd/com.deadman.collector.plist), not typed by hand, so it
+# needs a real command a plist's ProgramArguments can name.
+deadman-collector = "deadman.collector.run:main"
 
 [project.optional-dependencies]
 dev = [
