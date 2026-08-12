@@ -2,7 +2,7 @@
 id: DM2.7
 title: An alarm that actually reaches Kevin
 plan: plan-sprint-2-engage
-status: blocked
+status: done
 sprint: '2'
 depends_on:
 - DM2.1
@@ -19,6 +19,11 @@ runtime:
     worktree: a6de1524cdda4f23d0ce7667a1e43d0055c51659
   started_at: '2026-08-11T19:46:06.295736+00:00'
   completed_at: '2026-08-11T20:01:17.249883+00:00'
+  phase_segments:
+  - phase: implementation
+    started_at: '2026-08-11T19:46:06.295736+00:00'
+    completed_at: '2026-08-12T05:00:55.369304+00:00'
+completed_at: '2026-08-12T05:00:55.212732+00:00'
 ---
 
 # An alarm that actually reaches Kevin
@@ -27,7 +32,7 @@ DM1.11 built `AlertChannel` with a startup refusal to sit on a rail deadman watc
 
 # Acceptance Criteria
 
-- [ ] An email transport delivers through the existing ops email rail and one real message is confirmed received — **BLOCKED, see Evidence.** `EmailTransport`/`email_transport_from_env` are written and tested against the exact SMTP shape `ops/lib/email_send.py` uses; the ops repo's own `SMTP_HOST`/`PORT`/`USER`/`PASS`/`FROM` in `.env` are labelled in-repo as `# DUMMY SMTP — for T87.2 testing only. Real sends will fail at connect`, and `ops/monitoring/alertmanager/alertmanager.yml` independently confirms email delivery is still a `# In production, add:` TODO there. No working ops SMTP account exists in this environment to send a real message through. Documented as a manual one-time step in `docs/alerting.md` once real credentials exist (ops' own `backlog-sprint-T152-outbound-email-rail.md`, or any other working account in the meantime).
+- [x] An email transport delivers through the existing ops email rail and one real message is confirmed received — **DONE 2026-08-12.** The DUMMY label the build agent read was stale: the rail works, proven behaviorally rather than by reading `.env` (the morning brief delivered through it until 2026-08-04). Two real messages sent and confirmed received in Kevin's inbox via Gmail: one through `ops/lib/email_send.py` directly (04:52Z), and one through **deadman's own `EmailTransport`** via `email_transport_from_env` with the ops `SMTP_*` values mapped to `DEADMAN_ALERT_*` (04:53Z, subject "deadman: DM2.7 verification via deadman's own EmailTransport"). The out-of-band assertion ran against the real monitored surface list (`host:disk/`, `cron:morning-brief`) and construction succeeded, since email is not a monitored rail.
 - [x] The out-of-band assertion runs against the real monitored surface list rather than a literal, so wiring the alarm to a watched rail raises at construction — `real_monitored_surfaces()` in `src/deadman/remediate/transports.py` reads `deadman.service.default_probes()` directly rather than a retyped literal.
 - [x] A test wires the alarm to a monitored rail and asserts the construction-time refusal — `test_wiring_the_alarm_to_a_real_monitored_rail_raises_at_construction` in `tests/test_transports.py`.
 - [x] Repeated identical alerts are throttled by a documented window — `ThrottledAlertChannel` + `DEFAULT_THROTTLE_WINDOW` (1h, documented in `docs/alerting.md`); `test_repeated_identical_state_is_throttled_within_the_window`.

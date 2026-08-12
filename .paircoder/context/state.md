@@ -125,6 +125,52 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+### Session: 2026-08-12 — the collector is real: DM2.7 closed, kevin-mac installed and watched
+
+**The estate is now actually monitored.** The full loop DM2 was designed for
+ran for the first time: a collector on Kevin's Mac swept real surfaces,
+signed a batch, shipped it to the live service, the rows landed in Firestore,
+and the board reports both the evidence and the collector's own liveness.
+
+**DM2.7 closed.** The "DUMMY SMTP" label the build agent read was stale — the
+rail works, proven behaviorally rather than by reading `.env` (the morning
+brief delivered through it until 08-04). Two real messages confirmed received
+in Kevin's inbox: one through `ops/lib/email_send.py`, one through
+**deadman's own `EmailTransport`** with ops `SMTP_*` mapped to
+`DEADMAN_ALERT_*`. The out-of-band assertion ran against the real monitored
+surface list and passed. All nine DM2.7 ACs now checked.
+
+**The kevin-mac collector is installed**, per the hardened runbook:
+`~/.deadman` (700) with `collector-env.sh` (600, secret piped from Secret
+Manager over ssh and never printed), config at `~/.deadman/collector.json`
+(spool and disk history under `~/.deadman/`, durable across reboot, rather
+than the example's `/tmp`), plist materialized, `plutil -lint` gated,
+`launchctl bootstrap`ed, RunAtLoad exit 0, 900s cadence. Dry-run first, then
+a real run: batch accepted, spool empty, both surfaces in Firestore.
+
+**And the service watches its silence.** `infra/collector/collectors.json`
+(kevin-mac only — declaring the uninstalled rig collector would be a FAULT
+the board correctly reports forever) rides in the image via a Dockerfile
+COPY; `DEADMAN_COLLECTORS=/app/infra/collector/collectors.json` set on the
+service. Deployed at tag `86c3662`.
+
+**The live board now shows** (`GET /`): `collector:kevin-mac` healthy inside
+its 1800s deadline; `cron:morning-brief` **FAULT via the collector** — "no
+brief sent in 185.0h (~7 missed)", the real outage watched by real
+infrastructure, method correctly downgraded to `reported` on arrival; and
+`host:mac/disk` FAULT on the day's real disk crisis. Known behavior worth a
+DM3 look: the disk slope extrapolates from 2 samples minutes apart
+(487GB/day), so young trends over-alarm until history accumulates.
+
+**Also found this session:** the venv had no `pip` (uv-built), so the new
+`deadman-collector` entry point needed `uv pip install -e . --python
+.venv/bin/python` — `deadman-self-check` existing while `deadman-collector`
+404s is the symptom.
+
+**Remaining in DM2: DM2.8 (board memory) and DM2.9 (integration gate +
+PROOF.md).** Kevin still owes: the demo video recording, the Devpost
+submission, and repo sharing with the judge addresses.
+
 ### Session: 2026-08-11 — DM2.6 verified end to end, budget alert set
 
 **DM2.6 is no longer blocked. The scheduler fired and the evidence landed.**
