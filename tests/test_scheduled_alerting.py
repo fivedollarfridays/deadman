@@ -18,7 +18,11 @@ from deadman.evidence.model import Evidence, Method, Observation
 from deadman.scheduled.alerting import AlarmUnconfigured, alarm_from_env, evaluate
 from deadman.self_check import Liveness
 from deadman.store.memory import InMemoryEvidenceStore
-from deadman.verify.collector_liveness import CollectorReport, LivenessReport
+from deadman.verify.collector_liveness import (
+    CollectorReport,
+    LivenessReport,
+    collector_evidence,
+)
 from deadman.verify.expectations import CollectorExpectation
 
 NOW = datetime(2026, 8, 12, 6, 0, tzinfo=timezone.utc)
@@ -47,9 +51,16 @@ def _liveness(
     collectors: tuple[CollectorReport, ...] = (),
     surfaces: tuple[Evidence, ...] = (),
 ) -> LivenessReport:
+    """Fixtures go through the REAL renderer (``collector_evidence``), never a
+    hand-built row. The first version of this file hand-built ``collectors``
+    as ``CollectorReport`` objects, which matched the implementation's wrong
+    assumption instead of ``assess()``'s actual output — every test passed and
+    the first live sweep raised ``AttributeError``. A fixture the production
+    code path did not produce proves nothing about the production code path.
+    """
     kinds = [e.observation for e in surfaces]
     return LivenessReport(
-        collectors=collectors,
+        collectors=tuple(collector_evidence(report) for report in collectors),
         surfaces=surfaces,
         fresh=sum(1 for k in kinds if k is not Observation.UNOBSERVABLE),
         stale=0,
