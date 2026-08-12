@@ -94,6 +94,18 @@ def evaluate(
     """Fire the alarm for everything alertable in one sweep. Returns the
     number of alerts delivered to the channel (before throttling).
 
+    ``liveness.rows`` are :class:`Evidence` — the same rendered rows the board
+    shows — because that is what :func:`deadman.verify.collector_liveness.assess`
+    actually returns. The first deploy of this module assumed ``collectors``
+    held ``CollectorReport`` objects, the hermetic suite agreed with the
+    assumption because its fixture encoded it, and the live service raised
+    ``AttributeError`` on the first real sweep. The tests now build their
+    fixtures through the real renderers for exactly that reason.
+
+    A collector row's alert state is ``detail["liveness"]`` (``stale`` /
+    ``no_evidence``) rather than its observation, so a throttled repeat and a
+    state *change* are distinguished by what actually changed.
+
     A transport failure propagates after being recorded as evidence — the
     scheduled request then fails loudly and Cloud Scheduler's job status goes
     red, which is exactly the visibility a broken alarm deserves.
@@ -101,35 +113,14 @@ def evaluate(
     fired = 0
 
     if liveness is not None:
-        for report in liveness.collectors:
-            if report.liveness.value == "live":
-                continue
-            surface = collector_surface(report.expectation.collector_id)
-            silent = (
-                f"silent for {report.silent_for_seconds:.0f}s"
-                if report.silent_for_seconds is not None
-                else "has never reported"
-            )
-            channel.alert(
-                surface,
-                report.liveness.value,
-                (
-                    f"deadman: collector {report.expectation.collector_id} is "
-                    f"{report.liveness.value} — {silent}, expected every "
-                    f"{report.expectation.interval_seconds:g}s. A silent collector "
-                    f"means every surface it carries is going dark."
-                ),
-                now=now,
-            )
-            fired += 1
-
-        for row in liveness.surfaces:
+        for row in liveness.rows:
             if row.observation is Observation.HEALTHY:
                 continue
+            state = str(row.detail.get("liveness") or row.observation.value)
             channel.alert(
                 row.surface,
-                row.observation.value,
-                f"deadman: {row.surface} is {row.observation.value} — {row.summary}",
+                state,
+                f"deadman: {row.surface} is {state} — {row.summary}",
                 now=now,
             )
             fired += 1
