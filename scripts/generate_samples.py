@@ -78,6 +78,9 @@ def _fixed(board: dict, work: Path) -> dict:
     """
     for row in board["surfaces"]:
         row["read_at"] = NOW.isoformat()
+        # held_since defaults to the row's own read_at when there is no store
+        # (see deadman.service._held_since) — fixed for the same reason.
+        row["held_since"] = NOW.isoformat()
         # The generator runs from a temp directory whose path differs per run.
         row["source"] = row["source"].replace(str(work), "<work>")
         if "path" in row.get("detail", {}):

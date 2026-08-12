@@ -27,3 +27,12 @@ purpose: this is a spot check of the real world at a moment in time, not
 regenerated output a test can byte-compare against (see
 `scripts/generate_samples.py` for that pattern, which applies to synthetic
 demonstration data, not this).
+
+`dm1-board-sample.json` is a different kind of frozen file: not a probe
+capture but `sample-outputs/board.json` exactly as committed at the DM1
+merge (`git show ef40500:sample-outputs/board.json`). It exists so
+`tests/test_board_dm1_contract.py` can assert the deployed DM1 board's JSON
+contract still holds — every key it promised is still present, additively —
+without that check breaking every time the board legitimately grows a new
+field. Never regenerate it; it is a record of what shipped, not of what the
+code produces today.
