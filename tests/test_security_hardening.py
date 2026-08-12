@@ -115,7 +115,12 @@ class TestTheBoardDoesNotRepublishTheEstate:
         assert "kevinmasterson" not in str(published)
         assert "path" in published["detail"].get("withheld", [])
 
-    def test_collector_identity_is_withheld(self):
+    def test_collector_identity_is_withheld_from_detail(self):
+        """``detail``-level redaction, specifically. DM2C.1 adds a deliberate
+        top-level ``reported_by`` field carrying the same collector id (see
+        ``TestCollectorAttributionIsADeliberateTopLevelField`` below) — that is
+        an intentional promotion, not a loosening of this gate, so this test
+        now checks ``detail`` rather than the whole row."""
         from deadman.service import _evidence_row
 
         arrived = on_arrival(
@@ -134,7 +139,7 @@ class TestTheBoardDoesNotRepublishTheEstate:
 
         published = _evidence_row(arrived)
 
-        assert "mac-mini" not in str(published)
+        assert "mac-mini" not in str(published["detail"])
         assert published["detail"]["free_gb"] == 80.0, "operational numbers still publish"
 
     def test_a_path_shaped_source_is_reduced(self):
@@ -151,6 +156,57 @@ class TestTheBoardDoesNotRepublishTheEstate:
         )
 
         assert "kevinmasterson" not in str(_evidence_row(evidence))
+
+
+class TestCollectorAttributionIsADeliberateTopLevelField:
+    """DM2C.1, decision 1. Collector ids are already public in a collector's
+    own liveness surface name (``collector:kevin-mac``, see
+    ``deadman.verify.collector_liveness.collector_surface``), so a top-level
+    ``reported_by`` naming the same id on every row that collector delivered
+    reveals nothing a reader could not already see. This is the other side of
+    ``test_collector_identity_is_withheld_from_detail`` above: ``detail``
+    stays gated, and this field is a deliberate, named exception to it, not a
+    weakening of it.
+    """
+
+    def test_a_reported_row_names_its_collector_at_the_top_level(self):
+        from deadman.service import _evidence_row
+
+        arrived = on_arrival(
+            Evidence(
+                surface="host:mac/disk",
+                observation=Observation.HEALTHY,
+                method=Method.LOCAL_ARTIFACT,
+                summary="80GB free",
+                source="shutil.disk_usage('/')",
+                read_at=NOW,
+                detail={"free_gb": 80.0},
+            ),
+            "mac-mini",
+            NOW,
+        )
+
+        published = _evidence_row(arrived)
+
+        assert published["reported_by"] == "mac-mini"
+        assert "collector_id" not in published["detail"]
+
+    def test_the_services_own_probes_carry_no_reported_by(self):
+        from deadman.service import _evidence_row
+
+        evidence = Evidence(
+            surface="host:disk/",
+            observation=Observation.HEALTHY,
+            method=Method.LOCAL_ARTIFACT,
+            summary="80GB free",
+            source="statvfs:/",
+            read_at=NOW,
+            detail={"free_gb": 80.0},
+        )
+
+        published = _evidence_row(evidence)
+
+        assert "reported_by" not in published
 
 
 class TestTheClientCannotChooseARowsIdentity:

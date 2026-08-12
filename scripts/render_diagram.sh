@@ -26,7 +26,7 @@ fi
 
 "$CHROME" --headless --disable-gpu --no-sandbox \
   --screenshot="$DOCS/architecture.png" \
-  --window-size=1280,760 \
+  --window-size=1280,1080 \
   --default-background-color=FFFFFFFF \
   --hide-scrollbars \
   "file://$DOCS/architecture.svg" 2>/dev/null

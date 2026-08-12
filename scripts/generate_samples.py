@@ -18,9 +18,20 @@ a genuine behaviour change inside the churn.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+#: ``deadman.service`` builds its WSGI app at import and refuses to import at
+#: all without an ingest and a scheduler secret — a deliberate fail-closed
+#: startup (see that module's docstring). This script imports it for one pure
+#: function, ``build_board``, and serves nothing, so it supplies placeholders
+#: the way ``tests/conftest.py`` does rather than asking whoever regenerates
+#: the samples to export real secrets. Set before the import, and only when
+#: unset, so a shell that already holds the real values keeps them.
+for _var in ("DEADMAN_INGEST_SECRET", "DEADMAN_SCHEDULER_SECRET"):
+    os.environ.setdefault(_var, "sample-generation-placeholder-not-a-real-secret")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
 
@@ -78,6 +89,9 @@ def _fixed(board: dict, work: Path) -> dict:
     """
     for row in board["surfaces"]:
         row["read_at"] = NOW.isoformat()
+        # held_since defaults to the row's own read_at when there is no store
+        # (see deadman.service._held_since) — fixed for the same reason.
+        row["held_since"] = NOW.isoformat()
         # The generator runs from a temp directory whose path differs per run.
         row["source"] = row["source"].replace(str(work), "<work>")
         if "path" in row.get("detail", {}):

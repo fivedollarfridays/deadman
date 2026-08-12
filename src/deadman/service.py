@@ -32,12 +32,13 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from wsgiref.simple_server import make_server
 
 from deadman import redact
 from deadman import scheduled as scheduled_pkg
+from deadman.board import held_since, history_for, reported_by
 from deadman.evidence.model import Evidence, Observation
 from deadman.ingest.auth import secret_from_env
 from deadman.ingest.endpoint import EVIDENCE_PATH, IngestEndpoint
@@ -83,7 +84,7 @@ def default_probes() -> list[Probe]:
     ]
 
 
-def _evidence_row(evidence: Evidence) -> dict[str, object]:
+def _evidence_row(evidence: Evidence, history: Sequence[Evidence] = ()) -> dict[str, object]:
     """One board row, redacted for an unauthenticated reader.
 
     ``GET /`` is deployed ``--allow-unauthenticated`` and its URL is published,
@@ -91,8 +92,20 @@ def _evidence_row(evidence: Evidence) -> dict[str, object]:
     probes running in this process; ingest means they now carry a collector's
     absolute paths, its id, and our arrival times, and publishing those verbatim
     hands a stranger a map of Kevin's machines.
+
+    ``reported_by`` (:func:`deadman.board.reported_by`) is a deliberate
+    exception to that gate, not a loosening of it: a collector's id is already
+    public in its own liveness surface name (``collector:kevin-mac``), so
+    naming it again here reveals nothing new. It is absent, not null, when the
+    row is one of the service's own probes.
+
+    ``held_since``/``held_seconds`` come from ``history`` via
+    :func:`deadman.board.held_since` — how long the row's current observation
+    has held, walked back through stored history rather than restated from
+    this one reading.
     """
-    return {
+    since = held_since(evidence, history)
+    row: dict[str, object] = {
         "surface": evidence.surface,
         "observation": evidence.observation.value,
         "method": evidence.method.value,
@@ -100,13 +113,20 @@ def _evidence_row(evidence: Evidence) -> dict[str, object]:
         "source": redact.public_source(evidence.source),
         "read_at": evidence.read_at.isoformat(),
         "detail": redact.public_detail(evidence.detail),
+        "held_since": since.isoformat(),
+        "held_seconds": round((evidence.read_at - since).total_seconds(), 1),
     }
+    by = reported_by(evidence)
+    if by is not None:
+        row["reported_by"] = by
+    return row
 
 
 def build_board(
     probes: list[Probe],
     self_log: SelfEvidenceLog | None = None,
     liveness: LivenessReport | None = None,
+    store: EvidenceStore | None = None,
 ) -> dict[str, object]:
     """The current board: every probe's evidence plus the counts a human
     reads first. Blind spots get their own field per ``base.blind_spots`` —
@@ -127,6 +147,12 @@ def build_board(
     cadence. Without it the board answers "is anything broken here" while
     silently declining to answer "is anyone still reporting", and those two
     look identical from the outside.
+
+    ``store``, when given, is where each row's held-duration is read from
+    (see :mod:`deadman.board`) — the same store ingest writes to and liveness
+    reads from, so a row's history is never staler than what the rest of the
+    board already knows. Omitting it (the local-sweep-only case) is not an
+    error: every row still renders a duration, just zero.
     """
     evidence = sweep(probes)
     if self_log is not None:
@@ -135,7 +161,7 @@ def build_board(
     rows = [*evidence, *(liveness.rows if liveness is not None else ())]
     blind = blind_spots(rows)
     return {
-        "surfaces": [_evidence_row(e) for e in rows],
+        "surfaces": [_evidence_row(e, history_for(store, e.surface)) for e in rows],
         "blind_spots": [e.surface for e in blind],
         "healthy_count": sum(1 for e in rows if e.observation is Observation.HEALTHY),
         "fault_count": sum(1 for e in rows if e.observation is Observation.FAULT),
@@ -186,6 +212,7 @@ def make_app(
     ingest: IngestEndpoint | None = None,
     liveness_fn: LivenessFn | None = None,
     scheduled: scheduled_pkg.ScheduledSelfCheckEndpoint | None = None,
+    store: EvidenceStore | None = None,
 ) -> Callable[[dict, Callable], Iterable[bytes]]:
     """Build a WSGI app reading probes from ``probes_fn`` on every request,
     so the board reflects the current state rather than one taken at
@@ -210,6 +237,10 @@ def make_app(
     self-evidence writer, deliberately separate from ``self_log`` above: that
     one is written on a served board, this one on a cadence, and each must
     keep proving liveness if the other stops.
+
+    ``store`` feeds ``build_board``'s held-duration read (see
+    :func:`build_board`), fetched fresh per request for the same reason as
+    ``probes_fn``: history accumulates between requests.
     """
 
     def app(environ: dict, start_response: Callable) -> Iterable[bytes]:
@@ -239,6 +270,7 @@ def make_app(
             probes_fn(),
             self_log=self_log,
             liveness=liveness_fn() if liveness_fn is not None else None,
+            store=store,
         )
         return _respond(start_response, "200 OK", board)
 
@@ -368,6 +400,7 @@ def build_app() -> Callable[[dict, Callable], Iterable[bytes]]:
         ingest=default_ingest(store),
         liveness_fn=(lambda: assess(store, expectations)) if expectations else None,
         scheduled=default_scheduled(store),
+        store=store,
     )
 
 

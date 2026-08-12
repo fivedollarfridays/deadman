@@ -1,0 +1,12 @@
+id: plan-sprint-2-engage
+metadata:
+  cli_channel: stable
+  source_backlog: plans/backlogs/DM2C-close.md
+phases:
+- id: 1
+  tasks:
+  - DM2C.1
+  - DM2C.2
+status: complete
+title: Sprint 2
+type: feature

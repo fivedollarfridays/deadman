@@ -15,25 +15,18 @@
         "floor_gb": 5.0,
         "samples": "<varies by host>",
         "trend": "insufficient history"
-      },
-      "held_since": "2026-08-11T06:00:00+00:00",
-      "held_seconds": 0.0
+      }
     },
     {
       "surface": "cron:morning-brief",
       "observation": "unobservable",
       "method": "reported",
       "summary": "cannot observe cron:morning-brief: log directory does not exist (path misconfigured?)",
-      "source": "morning-brief.jsonl",
+      "source": "<work>/absent/morning-brief.jsonl",
       "read_at": "2026-08-11T06:00:00+00:00",
       "detail": {
-        "reason": "log directory does not exist (path misconfigured?)",
-        "withheld": [
-          "path"
-        ]
-      },
-      "held_since": "2026-08-11T06:00:00+00:00",
-      "held_seconds": 0.0
+        "reason": "log directory does not exist (path misconfigured?)"
+      }
     }
   ],
   "blind_spots": [
@@ -41,10 +34,5 @@
   ],
   "healthy_count": 1,
   "fault_count": 0,
-  "blind_count": 1,
-  "collectors_declared": 0,
-  "fresh_count": 0,
-  "stale_count": 0,
-  "unreported_count": 0,
-  "undeclared_surfaces": []
+  "blind_count": 1
 }

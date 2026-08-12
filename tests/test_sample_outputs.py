@@ -11,6 +11,8 @@ compare byte for byte.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,6 +38,39 @@ def test_committed_sample_matches_a_fresh_generation(name, tmp_path):
         f"{name} differs from what scripts/generate_samples.py produces. "
         f"Regenerate with: python scripts/generate_samples.py"
     )
+
+
+def test_the_generator_runs_outside_the_suite(tmp_path):
+    """``python scripts/generate_samples.py`` has to work from a plain shell.
+
+    The suite's ``conftest`` sets the ingest and scheduler secrets, and
+    ``deadman.service`` builds its WSGI app at import and refuses without them.
+    So the generator passed here while the documented command failed for anyone
+    who ran it — a regeneration step nobody can run is a hand-written sample
+    with extra steps. Asserted in a subprocess with every ``DEADMAN_*``
+    variable stripped, because that is the only place conftest cannot help.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DEADMAN_")}
+    scripts = str(Path(__file__).resolve().parent.parent / "scripts")
+
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]);"
+            "from pathlib import Path; import generate_samples;"
+            "generate_samples.generate(Path(sys.argv[2]))",
+            scripts,
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert done.returncode == 0, done.stderr
+    for name in SAMPLES:
+        assert (tmp_path / name).exists()
 
 
 def test_the_generator_is_deterministic(tmp_path):
