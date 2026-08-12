@@ -2,7 +2,7 @@
 id: DM2.7
 title: An alarm that actually reaches Kevin
 plan: plan-sprint-2-engage
-status: blocked
+status: done
 sprint: '2'
 depends_on:
 - DM2.1
@@ -19,6 +19,11 @@ runtime:
     worktree: a6de1524cdda4f23d0ce7667a1e43d0055c51659
   started_at: '2026-08-11T19:46:06.295736+00:00'
   completed_at: '2026-08-11T20:01:17.249883+00:00'
+  phase_segments:
+  - phase: implementation
+    started_at: '2026-08-11T19:46:06.295736+00:00'
+    completed_at: '2026-08-12T05:00:55.369304+00:00'
+completed_at: '2026-08-12T05:00:55.212732+00:00'
 ---
 
 # An alarm that actually reaches Kevin
