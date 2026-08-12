@@ -125,6 +125,52 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+### Session: 2026-08-11 — DM2.6 verified end to end, budget alert set
+
+**DM2.6 is no longer blocked. The scheduler fired and the evidence landed.**
+`cloudscheduler.googleapis.com` enabled, job `deadman-self-check` created in
+`us-central1` on `*/15 * * * *` against `${URL}/self-check`, bearer token read
+from Secret Manager.
+
+Verified the way `infra/scheduler.md` insists on, because a job's own status is
+not evidence. The job attempted at `04:40:16Z`, and the row read back out of
+Firestore is:
+
+```
+observation healthy · method local_artifact · read_at 2026-08-12T04:40:16Z
+summary "scheduled self-check: sweep completed (2 surfaces, 1 blind)"
+detail keys: blind, sweep_size
+```
+
+That is the cold-start claim proven against the real deploy rather than
+in-process: the scheduler fired, the request reached the authenticated
+endpoint, the endpoint swept, and the write landed in Firestore where a
+different instance can read it back.
+
+**Two path traps found while doing it**, both worth knowing because each
+produces a confident wrong answer:
+
+- The endpoint is `/self-check`, **not** `/scheduled/self-check`. The wrong
+  path returns `405`, which reads like "route exists, wrong method" and would
+  have produced a scheduler job failing silently forever. `SCHEDULED_PATH` in
+  `src/deadman/scheduled/endpoint.py` is the authority.
+- Firestore document ids are **already** percent-encoded by `surface_key`, so
+  `self:sweep` is stored as the literal `self%3Asweep`. Reading it over the
+  REST API needs `self%253Asweep`; the single-encoded form returns an empty
+  collection rather than an error, which looks exactly like "nothing was
+  written".
+
+**The `$25` budget alert is set** on billing account `0148CA-176C18-47F84E`,
+scoped to this project, with alerts at 50%, 90% and 100% of current spend
+(budget id `647bb862-1d00-4c9f-8cdb-ac264f8cf766`). It had been unset since
+the project was created, which mattered more once Firestore started taking
+writes.
+
+**Still carrying the deferred finding #4:** the bearer token lives in the
+Cloud Scheduler job resource, readable by any principal with
+`cloudscheduler.jobs.get`. Replacing it with OIDC needs the endpoint to accept
+Google-signed tokens, which is a code change, so it stays DM3.
+
 ### Session: 2026-08-11 — DM2 IS LIVE, and deploying it found a bug nothing else could
 
 **The service now runs DM2**, image tag `6d6ad33`, matching `main` exactly,
