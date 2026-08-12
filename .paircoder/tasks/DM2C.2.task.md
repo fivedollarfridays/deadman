@@ -18,7 +18,9 @@ runtime:
   pre_task_sha:
     worktree: 515934084135b8c941e3af5829b8a398c0ee78db
   started_at: '2026-08-12T05:39:15.059890+00:00'
+  completed_at: '2026-08-12T06:01:54.230315+00:00'
 completed_at: '2026-08-12T06:01:23.221825+00:00'
+ac_verified: true
 ---
 
 # Integration gate and the real-world proof writeup
