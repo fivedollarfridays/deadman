@@ -2,7 +2,7 @@
 id: DM2.6
 title: Scheduled sweeps and scheduled self-check
 plan: plan-sprint-2-engage
-status: blocked
+status: done
 sprint: '2'
 depends_on:
 - DM2.4
@@ -19,6 +19,11 @@ runtime:
     worktree: 6c7356a9ee8859736b6efaa9e8b4d0ba774342db
   started_at: '2026-08-11T20:43:06.869573+00:00'
   completed_at: '2026-08-11T21:03:29.725814+00:00'
+  phase_segments:
+  - phase: implementation
+    started_at: '2026-08-11T20:43:06.869573+00:00'
+    completed_at: '2026-08-12T04:43:43.527807+00:00'
+completed_at: '2026-08-12T04:43:43.358478+00:00'
 ---
 
 # Scheduled sweeps and scheduled self-check
