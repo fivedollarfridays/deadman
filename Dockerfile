@@ -5,6 +5,11 @@ WORKDIR /app
 COPY pyproject.toml constraints.txt ./
 COPY src ./src
 
+# The collector liveness declaration. Configuration, not code, and carrying it
+# in the image keeps the deploy a single artifact: DEADMAN_COLLECTORS points
+# here. Nothing in it is secret — collector ids, cadences and surface names.
+COPY infra/collector ./infra/collector
+
 # `.[firestore]`, not `.`, because the deployed service stores ingested
 # evidence durably and `FirestoreEvidenceStore` raises `StoreSdkMissing` at
 # construction when the SDK is absent — fail-closed, which means the image
