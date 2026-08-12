@@ -159,19 +159,40 @@ silent shows up as `self:sweep` reading `STALE` or `NO_EVIDENCE`
 (`deadman.self_check.self_check`) — and neither report depends on the clock
 that produced the other one.
 
-## What this document does not close
+## Executed, and how that is known
 
-Every command above is written to be run against the live
-`deadman-20260810` project by whoever holds `gcloud` credentials for it —
-the environment this task was implemented in has no `gcloud` CLI and no
-Application Default Credentials configured (`gcloud`: command not found;
-`~/.config/gcloud` does not exist), so steps 1–3 above are documented and
-reproducible but **not yet executed**. This is the same class of gap
-`docs/alerting.md` recorded for DM2.7's SMTP verification rather than
-faking: the code, the auth, the store-backed self-check, and every test that
-can run without live GCP state are done and green (see
-`tests/test_scheduled_auth.py`, `tests/test_self_check_store.py`,
-`tests/test_service_schedule.py`, `tests/test_scheduled_startup.py`).
-Running steps 1–3 against the real project, from a machine with `gcloud`
-authenticated for `deadman-20260810`, is what turns this from a reproducible
-runbook into a verified one.
+Steps 1–3 were run against the live `deadman-20260810` project during DM2.6,
+from a machine with `gcloud` authenticated for it. The job
+`deadman-self-check` exists in `us-central1` on `*/15 * * * *`, it attempted
+at `2026-08-12T04:40:16Z`, and the row read back out of Firestore — not out
+of the job's own status — was:
+
+```
+observation healthy · method local_artifact · read_at 2026-08-12T04:40:16Z
+summary "scheduled self-check: sweep completed (2 surfaces, 1 blind)"
+detail keys: blind, sweep_size
+```
+
+That is the cold-start claim proved against the real deploy: the scheduler
+fired, the request reached the authenticated endpoint, the endpoint swept, and
+the write landed where a different instance can read it back.
+
+A second, cheaper check anyone can run without `gcloud` or Firestore
+credentials, because it asks the deployed service rather than the scheduler:
+
+```bash
+curl -sS https://deadman-mrapac5nda-uc.a.run.app/ \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['undeclared_surfaces'])"
+# ['self:sweep', 'smoke:deploy-check']
+```
+
+`undeclared_surfaces` is built from `store.latest_per_surface()` (see
+`src/deadman/verify/collector_liveness.py`), so `self:sweep` appearing there is
+the store confirming it holds self-check evidence. It is listed rather than
+judged because no collector declares a cadence for it — the scheduler is not a
+collector, and inventing an expectation for it here would be a number nobody
+declared.
+
+This section previously said steps 1–3 were documented but not executed. That
+was true when it was written and stopped being true in DM2.6; a runbook whose
+status is stale is the same instrument problem as a stale probe.

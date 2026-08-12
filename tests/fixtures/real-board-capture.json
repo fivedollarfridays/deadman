@@ -1,0 +1,121 @@
+{
+  "captured": true,
+  "captured_at": "2026-08-12T05:42:43+00:00",
+  "url": "https://deadman-mrapac5nda-uc.a.run.app/",
+  "http_status": 200,
+  "served_revision_image_tag": "86c3662",
+  "note": "GET / against the deployed service, unedited. The morning brief outage is on this board twice over: `cron:morning-brief` FAULT at 185.7h via the kevin-mac collector (method downgraded to `reported` on arrival, per deadman.ingest.arrival), and the service's own credential-free copy of that surface UNOBSERVABLE because Cloud Run has no such log — which is the collector/service split stated in output. Captured deliberately from the deployed revision (image tag 86c3662), which predates DM2C.1, so no row carries `reported_by`/`held_since`; those fields are in the code and in sample-outputs/board.json, not yet in this capture. docs/PROOF.md reads its numbers out of this file and tests/fixtures/real-morning-brief-fault.json, never from memory.",
+  "board": {
+    "surfaces": [
+      {
+        "surface": "host:disk/",
+        "observation": "healthy",
+        "method": "local_artifact",
+        "summary": "755.7GB free, not shrinking",
+        "source": "statvfs:/",
+        "read_at": "2026-08-12T05:42:43.399800+00:00",
+        "detail": {
+          "free_bytes": 811478835200,
+          "free_gb": 755.75,
+          "total_gb": 755.75,
+          "pct_free": 100.0,
+          "floor_gb": 5.0,
+          "samples": 5,
+          "slope_gb_per_day": 0.0,
+          "runway_days": null
+        }
+      },
+      {
+        "surface": "cron:morning-brief",
+        "observation": "unobservable",
+        "method": "reported",
+        "summary": "cannot observe cron:morning-brief: log directory does not exist (path misconfigured?)",
+        "source": "morning-brief.jsonl",
+        "read_at": "2026-08-12T05:42:43.399865+00:00",
+        "detail": {
+          "reason": "log directory does not exist (path misconfigured?)",
+          "withheld": [
+            "path"
+          ]
+        }
+      },
+      {
+        "surface": "collector:kevin-mac",
+        "observation": "healthy",
+        "method": "local_artifact",
+        "summary": "collector kevin-mac last reported 168s ago, inside its declared 1800s deadline",
+        "source": "verify:collector_liveness",
+        "read_at": "2026-08-12T05:42:43.011140+00:00",
+        "detail": {
+          "liveness": "live",
+          "cadence_seconds": 900.0,
+          "silent_after_seconds": 1800.0,
+          "last_report_at": "2026-08-12T05:39:55.227733+00:00",
+          "silent_for_seconds": 167.8,
+          "withheld": [
+            "collector_id",
+            "declared_surfaces"
+          ]
+        }
+      },
+      {
+        "surface": "host:mac/disk",
+        "observation": "healthy",
+        "method": "reported",
+        "summary": "53.6GB free, not shrinking",
+        "source": "statvfs:/",
+        "read_at": "2026-08-12T05:39:55.070020+00:00",
+        "detail": {
+          "total_gb": 228.27,
+          "samples": 6,
+          "runway_days": null,
+          "floor_gb": 5.0,
+          "slope_gb_per_day": 73.881,
+          "free_gb": 53.62,
+          "free_bytes": 57574416384,
+          "pct_free": 23.49,
+          "withheld": [
+            "collector_id",
+            "received_at",
+            "reported_method",
+            "wire_row_id"
+          ]
+        }
+      },
+      {
+        "surface": "cron:morning-brief",
+        "observation": "fault",
+        "method": "reported",
+        "summary": "no brief sent in 185.7h (window 30h, ~7 missed)",
+        "source": "brief-send-log.jsonl",
+        "read_at": "2026-08-12T05:39:55.070216+00:00",
+        "detail": {
+          "window_hours": 30.0,
+          "last_send_at": "2026-08-04T11:56:45.586032+00:00",
+          "row_count": 1,
+          "age_hours": 185.72,
+          "withheld": [
+            "collector_id",
+            "received_at",
+            "reported_method",
+            "wire_row_id"
+          ]
+        }
+      }
+    ],
+    "blind_spots": [
+      "cron:morning-brief"
+    ],
+    "healthy_count": 3,
+    "fault_count": 1,
+    "blind_count": 1,
+    "collectors_declared": 1,
+    "fresh_count": 2,
+    "stale_count": 0,
+    "unreported_count": 0,
+    "undeclared_surfaces": [
+      "self:sweep",
+      "smoke:deploy-check"
+    ]
+  }
+}

@@ -13,6 +13,14 @@ appeared on the platform, is green everywhere you would think to look.
 This was built after a comms rail captured nothing for **24 days** behind a
 green heartbeat. Nobody ignored an alert. There was no alert.
 
+Then it happened again, during this build. The morning brief — the daily mail
+that reports on everything else in the estate — stopped sending on 2026-08-04
+and nobody noticed for **seven days**, because the brief is itself the alerting
+channel and a dead brief cannot report its own death. It is now on the public
+board as a `fault`, watched by a real collector. The evidence, the timeline and
+what detection costs now are in **[`docs/PROOF.md`](docs/PROOF.md)**, written
+from committed captures and checked by a test.
+
 ![architecture](docs/architecture.png)
 
 ## What it does differently
@@ -119,10 +127,17 @@ python scripts/demo.py                       # no network
 deadman-self-check --log /path/to/self-evidence.jsonl
 ```
 
+Stage one of that demo breaks and heals a real surface with nothing standing
+in: a real probe over a real file, broken by the outage's own last log row out
+of the committed capture, and healed by a write that only counts once the probe
+is re-run. The phone relay in the later stages is the one simulated component,
+and it says so on screen.
+
 For the live Gemini path and deploying to Cloud Run, see
 [`docs/gemini-verification.md`](docs/gemini-verification.md) and
-[`infra/README.md`](infra/README.md). The demo script and its rehearsed
-runtime are in [`docs/DEMO.md`](docs/DEMO.md).
+[`infra/README.md`](infra/README.md). The run sheet — pre-flight, the beats, and
+what to do when a live model call comes back ungrounded on camera — is
+[`docs/DEMO.md`](docs/DEMO.md).
 
 ## Built for All Things Agentic
 
