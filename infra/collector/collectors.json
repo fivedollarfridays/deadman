@@ -1,0 +1,14 @@
+{
+  "_comment": "The live collector liveness declaration DEADMAN_COLLECTORS points at. Only collectors that are actually installed belong here: declaring one that is not running is not a lie the board tells, it is a FAULT the board correctly reports forever. kevin-rig joins this list when its collector is actually installed, not before.",
+  "collectors": [
+    {
+      "collector_id": "kevin-mac",
+      "interval_seconds": 900,
+      "grace_intervals": 1.0,
+      "surfaces": [
+        "host:mac/disk",
+        "cron:morning-brief"
+      ]
+    }
+  ]
+}
