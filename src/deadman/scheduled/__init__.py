@@ -10,6 +10,7 @@ cold start.
 
 from __future__ import annotations
 
+from deadman.scheduled import alerting
 from deadman.scheduled.auth import (
     AUTHORIZATION_ENVIRON_KEY,
     AUTHORIZATION_HEADER,
@@ -25,6 +26,7 @@ __all__ = [
     "AUTHORIZATION_ENVIRON_KEY",
     "AUTHORIZATION_HEADER",
     "SCHEDULED_PATH",
+    "alerting",
     "SECRET_ENV",
     "ScheduledSelfCheckEndpoint",
     "SchedulerAuthError",

@@ -36,9 +36,9 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from wsgiref.simple_server import make_server
 
+from deadman import board as board_memory
 from deadman import redact
 from deadman import scheduled as scheduled_pkg
-from deadman.board import held_since, history_for, reported_by
 from deadman.evidence.model import Evidence, Observation
 from deadman.ingest.auth import secret_from_env
 from deadman.ingest.endpoint import EVIDENCE_PATH, IngestEndpoint
@@ -104,7 +104,7 @@ def _evidence_row(evidence: Evidence, history: Sequence[Evidence] = ()) -> dict[
     has held, walked back through stored history rather than restated from
     this one reading.
     """
-    since = held_since(evidence, history)
+    since = board_memory.held_since(evidence, history)
     row: dict[str, object] = {
         "surface": evidence.surface,
         "observation": evidence.observation.value,
@@ -116,7 +116,7 @@ def _evidence_row(evidence: Evidence, history: Sequence[Evidence] = ()) -> dict[
         "held_since": since.isoformat(),
         "held_seconds": round((evidence.read_at - since).total_seconds(), 1),
     }
-    by = reported_by(evidence)
+    by = board_memory.reported_by(evidence)
     if by is not None:
         row["reported_by"] = by
     return row
@@ -161,7 +161,7 @@ def build_board(
     rows = [*evidence, *(liveness.rows if liveness is not None else ())]
     blind = blind_spots(rows)
     return {
-        "surfaces": [_evidence_row(e, history_for(store, e.surface)) for e in rows],
+        "surfaces": [_evidence_row(e, board_memory.history_for(store, e.surface)) for e in rows],
         "blind_spots": [e.surface for e in blind],
         "healthy_count": sum(1 for e in rows if e.observation is Observation.HEALTHY),
         "fault_count": sum(1 for e in rows if e.observation is Observation.FAULT),
@@ -335,6 +335,7 @@ def default_ingest(store: EvidenceStore | None = None) -> IngestEndpoint:
 
 def default_scheduled(
     store: EvidenceStore | None = None,
+    expectations: tuple[CollectorExpectation, ...] | None = None,
 ) -> scheduled_pkg.ScheduledSelfCheckEndpoint:
     """The scheduled self-check endpoint the deployed service serves.
 
@@ -349,10 +350,14 @@ def default_scheduled(
     self-check's own evidence survives a cold start the way DM1.11's
     filesystem-backed log could not.
     """
+    backing = store or default_store()
+    expectations = expectations if expectations is not None else default_expectations()
     return scheduled_pkg.ScheduledSelfCheckEndpoint(
         probes_fn=default_probes,
-        self_log=StoreSelfEvidenceLog(store=store or default_store()),
+        self_log=StoreSelfEvidenceLog(store=backing),
         secret=scheduled_pkg.secret_from_env(),
+        alarm=scheduled_pkg.alerting.default_alarm(backing),
+        liveness_fn=(lambda: assess(backing, expectations)) if expectations else None,
     )
 
 
@@ -399,7 +404,7 @@ def build_app() -> Callable[[dict, Callable], Iterable[bytes]]:
         self_log=default_self_log(),
         ingest=default_ingest(store),
         liveness_fn=(lambda: assess(store, expectations)) if expectations else None,
-        scheduled=default_scheduled(store),
+        scheduled=default_scheduled(store, expectations),
         store=store,
     )
 
