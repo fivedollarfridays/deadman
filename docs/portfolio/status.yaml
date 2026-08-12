@@ -1,16 +1,9 @@
 version: 1
-updated_at: '2026-08-11T21:03:31.354513+00:00'
+updated_at: '2026-08-12T05:39:12.667103+00:00'
 last_transition:
-  event: task_blocked
-  at: '2026-08-11T21:03:31.354513+00:00'
-  task_id: DM2.6
-  reason: "\u274C Cannot complete: 2 acceptance criteria item(s) unchecked\n\nUnchecked\
-    \ items:\n  \u25CB Cloud Scheduler API enabled on `deadman-20260810` and a job\
-    \ created, with \nthe exact reproducible commands recorded in `infra/scheduler.md`\
-    \ \u2014 **BLOCKED, \nnot done**: `infra/scheduler.md` written with exact, reproducible\
-    \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
-    \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`: command\
-    \ not found;\n`~/.config/gcloud` absent), so"
+  event: task_done
+  at: '2026-08-12T05:39:12.667103+00:00'
+  task_id: DM2C.1
 transitions:
 - event: dispatch
   at: '2026-08-11T00:55:41.784992+00:00'
@@ -132,6 +125,12 @@ transitions:
     \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
     \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`: command\
     \ not found;\n`~/.config/gcloud` absent), so"
+- event: dispatch
+  at: '2026-08-12T05:22:02.984199+00:00'
+  task_id: DM2C.1
+- event: task_done
+  at: '2026-08-12T05:39:12.667103+00:00'
+  task_id: DM2C.1
 tasks:
   DM1.1:
     status: dispatched
@@ -205,3 +204,6 @@ tasks:
       \ `gcloud` \ncommands (API enable, secret provisioning, job creation), but this\
       \ sandboxed \nworktree has no `gcloud` CLI and no ADC configured (`gcloud`:\
       \ command not found;\n`~/.config/gcloud` absent), so"
+  DM2C.1:
+    status: done
+    updated_at: '2026-08-12T05:39:12.667103+00:00'

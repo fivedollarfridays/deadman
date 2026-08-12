@@ -5,14 +5,15 @@
 <!-- paircoder:state:begin -->
 ## Active Plan
 
-**Plan:** `plan-2026-08-dm2-make-it-real` — DM2: make it real
-**Status:** Planned, not started — 9 task files materialized
-**Current Sprint:** DM2
-**Backlog:** `plans/backlogs/DM2-make-it-real.md`
-**Brief:** `docs/SPRINT-BRIEF-DM2.md`
-**Branch:** `engage/dm2-make-it-real`
+**Plan:** `plan-2026-08-dm2c-close` — DM2C: close the sprint
+**Status:** Planned — 2 task files materialized, ready for DM2C.1
+**Current Sprint:** DM2C
+**Backlog:** `plans/backlogs/DM2C-close.md`
+**Branch:** `engage/dm2c-close`
 
-**Previous sprint:** `plan-2026-08-dm1-deadman-v1` — DM1, 12 of 12 `done`,
+**Previous sprints:** `plan-2026-08-dm2-make-it-real` — DM2, 7 of 9 `done`,
+merged and deployed (DM2.8/DM2.9 were never reached and are superseded by
+DM2C.1/DM2C.2). `plan-2026-08-dm1-deadman-v1` — DM1, 12 of 12 `done`,
 merged. Live at https://deadman-mrapac5nda-uc.a.run.app.
 
 Silent-failure detection and remediation for heterogeneous infrastructure.
@@ -64,19 +65,38 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2) — 9 tasks, 275 Cx, 8 P0 + 1 P1, 5 `done`, 2 `blocked`
+### Active Sprint (DM2C) — 2 tasks, 55 Cx, 1 P0 + 1 P1, 1 `done`
+
+| ID | Title | Pri | Cx | Model | Depends on |
+|---|---|---|---|---|---|
+| DM2C.1 | The board grows a memory ✓ | P1 | 25 | claude-sonnet-5 | — |
+| DM2C.2 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | DM2C.1 |
+
+**Waves:** `DM2C.1` → `DM2C.2` — serialized by design (backlog decision 3):
+both tasks edit `src/deadman/service.py`'s output surface, so the dependency
+is declared up front rather than discovered by engage at runtime.
+
+**Cut list:** nothing — two tasks is the floor of a closing sprint.
+
+**Decisions pre-made by the backlog** (tasks do not re-litigate): (1)
+collector attribution is a top-level `reported_by`, detail-level redaction
+untouched; (2) held-duration walks stored history to the last state change,
+never now-minus-newest-read_at; (4) PROOF.md is written from the committed
+fixture and captured board output because the live FAULT may heal mid-sprint.
+
+### Previous Sprint (DM2) — 9 tasks, 275 Cx, 7 `done`, DM2.8/DM2.9 superseded by DM2C
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM2.1 | Evidence store: Protocol seam + durable backend ✓ | P0 | 35 | claude-opus-5 | — |
 | DM2.2 | Authenticated ingest, and what a reported observation means ✓ | P0 | 35 | claude-opus-5 | DM2.1 |
-| DM2.7 | An alarm that actually reaches Kevin — **blocked** | P0 | 30 | claude-sonnet-5 | DM2.1 |
+| DM2.7 | An alarm that actually reaches Kevin ✓ | P0 | 30 | claude-sonnet-5 | DM2.1 |
 | DM2.3 | The collector: sweep where the surfaces actually are ✓ | P0 | 35 | claude-sonnet-5 | DM2.2 |
 | DM2.4 | Collector liveness: absence must not read as health ✓ | P0 | 30 | claude-opus-5 | DM2.2 |
 | DM2.5 | Real surfaces, starting with the one already broken ✓ | P0 | 30 | claude-sonnet-5 | DM2.3 |
-| DM2.6 | Scheduled sweeps and scheduled self-check — **blocked** | P0 | 25 | claude-sonnet-5 | DM2.4 |
-| DM2.8 | The board grows a memory | P1 | 25 | claude-sonnet-5 | DM2.6 |
-| DM2.9 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | all |
+| DM2.6 | Scheduled sweeps and scheduled self-check ✓ | P0 | 25 | claude-sonnet-5 | DM2.4 |
+| DM2.8 | The board grows a memory — superseded by DM2C.1 | P1 | 25 | claude-sonnet-5 | DM2.6 |
+| DM2.9 | Integration gate and the real-world proof writeup — superseded by DM2C.2 | P0 | 30 | claude-opus-5 | all |
 
 **Waves:** `DM2.1` → `DM2.2 DM2.7` → `DM2.3 DM2.4` → `DM2.5 DM2.6` →
 `DM2.8` → `DM2.9`
@@ -124,6 +144,128 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-12 — DM2C.1 done: the board grows a memory
+
+**Every board row now says how long it has held its state and who reported
+it.** `src/deadman/board.py` is new: `held_since` walks a surface's stored
+history newest-to-oldest until the observation changes, so a FAULT that has
+been re-confirmed every few minutes for three days reports `held_since` at
+the three-day mark, not the five-minutes-ago mark of its newest reading —
+`tests/test_board_memory.py::TestHeldDuration::test_held_since_walks_back_to_the_last_state_change`
+pins exactly that shape. No division anywhere in it, so a single-row surface
+(or one with no store at all — the plain local-sweep case) falls back to
+its own `read_at` and renders a zero duration rather than raising or
+indexing into history that isn't there.
+
+**`reported_by` is a deliberate, narrow exception to `redact.py`'s gate, not
+a loosening of it.** It is gated on `detail['received_at']` rather than
+`detail['collector_id']` alone: a liveness verdict the service derives
+itself (a collector's own liveness row, a surface judged stale or never
+reported) also carries `collector_id` — naming which collector the row
+*concerns* — but only a row that actually crossed the wire through
+`ingest.arrival.on_arrival` sets `received_at`. Getting that gate right
+mattered: the naive version (any row with `collector_id`) would have put
+`reported_by` on the collector's own synthesized liveness row too, which is
+backwards.
+
+**That gate collided with an existing pinned test, and the collision was
+real, not just a state.md prediction.** Planning's note said
+`test_collector_identity_is_withheld` would "pass unmodified"; it didn't —
+adding `reported_by: "mac-mini"` to a row necessarily puts `"mac-mini"` back
+into `str(published)`, which the old assertion checked directly. Renamed to
+`test_collector_identity_is_withheld_from_detail` and narrowed to check
+`detail` specifically (the thing the AC actually promises stays withheld),
+paired with a new `TestCollectorAttributionIsADeliberateTopLevelField`
+asserting both sides: `reported_by` public, `detail['collector_id']` still
+gone. Worth remembering: a planning-time prediction about which tests stay
+green is a hypothesis, not a constraint — the AC checklist (detail-level
+redaction unchanged) was the actual contract, and it held.
+
+**The DM1 board's JSON contract is now pinned by a real compatibility test,
+not just the byte-identical generator check.** `tests/fixtures/dm1-board-sample.json`
+is `sample-outputs/board.json` exactly as committed at the DM1 merge
+(`git show ef40500:sample-outputs/board.json`), frozen rather than
+regenerated. `tests/test_board_dm1_contract.py` asserts every key DM1 ever
+promised — top-level, per-row, and per-detail — is still present on a board
+built today. `test_sample_outputs.py`'s byte-for-byte check was the wrong
+tool for this question: it fails the moment the board legitimately grows a
+field, which is exactly what this task does.
+
+**Hit both of the architecture caps state.md flagged during planning, in
+one edit.** Adding `held_since`/`reported_by`/`history_for` inline in
+`service.py` tripped both "too many imports" (21 > 20) and "too many
+functions" (17 > 15) simultaneously. Fixed the way DM2's own
+`verify/surface_verdict.py` split was fixed: pulled the three helpers into
+a new `src/deadman/board.py`, which net *removed* two import statements
+from `service.py` (the ones only those helpers needed) while adding back
+only one (for the new module) — 18 statements, comfortably under the cap,
+and `service.py`'s own function count back to its pre-task 14.
+
+**`store` now threads through `build_board` → `make_app` → `build_app`**,
+read per request like `probes_fn`/`liveness_fn` already were, and bounded:
+`board.history_for` always calls `store.history(surface, limit=DEFAULT_HISTORY_LIMIT)`,
+never an unbounded read — `tests/test_board_memory.py::TestHistoryReadIsBounded`
+spies on the actual limit passed. `scripts/generate_samples.py` needed one
+line (`row["held_since"] = NOW.isoformat()`) alongside its existing
+`read_at` fix-up, since the un-stored sample probes' `held_since` otherwise
+carried real wall-clock generation time and broke the generator's own
+determinism test.
+
+All 8 ACs checked in `.paircoder/tasks/DM2C.1.task.md` with evidence. Gates:
+`pytest -n auto --dist=worksteal` 586/586 (up from 573), `ruff check .` and
+`ruff format --check .` clean, `bpsai-pair arch check --strict` clean,
+`sample-outputs/board.json` regenerated (additive `held_since`/`held_seconds`
+per row, diff reviewed).
+
+### Session: 2026-08-12 — DM2C planned (`/pc-plan DM2C-close.md`)
+
+Materialized 2 task files under `.paircoder/tasks/` from
+`plans/backlogs/DM2C-close.md` and registered both against the existing
+`plan-2026-08-dm2c-close` (which engage had created with zero tasks —
+`bpsai-pair status` was reporting both task files as not found, same shape
+as the DM2 planning session).
+
+**The task files are anchored to code, not restated from the backlog.** An
+explore pass surfaced three facts the implementation plans now carry:
+
+- **`build_board` (`service.py:106`) never touches the store** — it takes
+  probes plus a pre-computed `LivenessReport`; the store lives only in
+  `build_app` (:363). Held-duration needs `store.history()`, so DM2C.1's
+  plan threads an optional `store` param into board assembly rather than
+  computing duration in the liveness layer, which would cover only
+  collector-reported surfaces. `EvidenceStore.history` already exists with
+  `DEFAULT_HISTORY_LIMIT = 50`, oldest-first — DM2.1 built that seam for
+  precisely this task, so the bounded-read AC is met by using it, not by
+  new store surface.
+- **`reported_by` collides head-on with `redact.WITHHELD_DETAIL_KEYS`**
+  (`redact.py:35`) and its pin
+  `test_security_hardening.py::test_collector_identity_is_withheld`. Backlog
+  decision 1 already rules on this (collector ids are public in liveness
+  surface names, so a top-level derived `reported_by` reveals nothing new);
+  the task file demands the existing withholding test keep passing
+  *unmodified* plus a new paired test asserting both sides of the boundary.
+- **There is no DM1 board-compat test to lean on.** `test_sample_outputs.py`
+  is a byte-for-byte change-detector that will correctly *fail* when the row
+  shape grows. DM2C.1 therefore commits a DM1-era board sample (extractable
+  via `git show <dm1-merge>:sample-outputs/board.json`) and writes a real
+  additive-evolution contract test against it.
+
+Also corrected while planning: the backlog's "200-line arch cap" phrasing —
+`service.py` is already 384 lines; the enforced caps are 50 lines per
+function and the ~20-import threshold (DM2.6 tripped `21 > 20`), both via
+`arch check --strict`. The task file budgets against the real gates.
+
+**Model assignments follow the backlog** (DM2C.1 `claude-sonnet-5`, DM2C.2
+`claude-opus-5`), same rationale as the DM2 planning session: `calibration
+recommend-model` returns doctrine picks flagged `insufficient_samples`
+(sonnet-5 plain, opus-4-8 cross-module), and the backlog matches the repo's
+own opus-for-seam-defining convention.
+
+PM provider is `none` (Trello not connected), so local-only: no sync step.
+`bpsai-pair validate` passes; budget check ~18.5k tokens per task (<2%),
+well under the 75% threshold. Wave order `DM2C.1 → DM2C.2`, serialized by
+the declared `service.py` collision (backlog decision 3).
 
 ### Session: 2026-08-12 — the collector is real: DM2.7 closed, kevin-mac installed and watched
 
@@ -1420,40 +1562,42 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
   (~2% of context each); `plan estimate` 297,750 tokens; `plan feasibility`
   REFUSED on DM1.1, DM1.2, DM1.5.
 - Planned DM2: 9 task files materialized from plans/backlogs/DM2-make-it-real.md into plan-2026-08-dm2-make-it-real
+- Planned DM2C: registered DM2C.1/DM2C.2 on plan-2026-08-dm2c-close, task files materialized with code-anchored implementation plans
 
 
 ## What's Next
 
-**Now (DM2).** DM2.1, DM2.2, DM2.3, DM2.4 and DM2.5 are done. **DM2.6 and
-DM2.7 are both blocked**, and both for the same shape of reason: the code is
-done, tested and gate-clean, and what's missing is a human running a runbook
-against live external state this sandboxed environment cannot reach. See
-Blockers 4 and 5.
+**Now (DM2C).** The plan is materialized and validated; nothing is blocked.
+Start `DM2C.1` (board memory: `reported_by` + held-duration from stored
+history), then `DM2C.2` (integration gate + `docs/PROOF.md`), strictly in
+that order — both touch `service.py`'s output surface and the dependency is
+declared in the task files.
 
-**DM2.7** needs a real, working SMTP account to send through: `ops/.env`'s
-SMTP block is a labelled dummy (`# DUMMY SMTP — for T87.2 testing only. Real
-sends will fail at connect`), and ops's own alertmanager and `T152` backlog
-item confirm email delivery isn't live there yet either. Either wait on
-ops's `T152` (outbound email rail) to land, or point `DEADMAN_ALERT_*` at any
-other working SMTP account and run the one-time verification script in
-`docs/alerting.md`'s last section.
+One timing fact DM2C.2 depends on (backlog decision 4): the morning-brief
+fix shipped in ops on 2026-08-11, so the live board's FAULT may flip healthy
+at any 6:00am run. If the captured board output showing the real FAULT
+beside `collector:kevin-mac` is not yet committed, capturing it is
+DM2C.2's first move — PROOF.md is written from committed evidence, never
+from the live board.
 
-**DM2.6** needs a machine with `gcloud` authenticated for `deadman-20260810`
-— this environment has no `gcloud` CLI at all. `infra/scheduler.md` has the
-exact, reproducible commands: enable the Cloud Scheduler API, generate and
-set `DEADMAN_SCHEDULER_SECRET` on the live Cloud Run service, create the
-job, then trigger it once by hand and read the `self:sweep` row back through
-`FirestoreEvidenceStore` to prove it actually fired. **Do this before the
-next redeploy** — `deadman.service` now refuses to import without
-`DEADMAN_SCHEDULER_SECRET`, so a build that lands before the variable is set
-on the live service takes it down.
+**Kevin still owes** (unchanged): the demo video recording (with DM2C.2's
+run sheet), the Devpost submission, and repo sharing with the judge
+addresses. Deadline 2026-08-31 5:00pm PDT.
 
-DM2.8 depends on DM2.6, and DM2.6's code (the `service.py` changes, the
-store-backed self-check, the routing) is real and gate-green now even though
-the task itself is `blocked` on the two live-infra ACs above — whether
-`engage`'s dependency resolution treats a `blocked` upstream task as
-sufficient for DM2.8 to start, or waits for `done`, was not checked this
-session and should be confirmed before assuming DM2.8 can proceed.
+<details>
+<summary>Superseded DM2-era notes (DM2.6/DM2.7 unblock instructions — both
+since closed; kept for the runbook pointers)</summary>
+
+**DM2.7** needed a real SMTP account; closed 2026-08-12 — the ops rail
+worked all along (the "DUMMY SMTP" label was stale), two real messages
+confirmed received. `docs/alerting.md` has the verification script.
+
+**DM2.6** needed a `gcloud`-authenticated machine; closed 2026-08-11 —
+scheduler job `deadman-self-check` created and verified by reading the
+`self:sweep` row back out of Firestore. `infra/scheduler.md` remains the
+runbook of record.
+
+</details>
 
 DM2.6 inherited one change from DM2.5 worth flagging: `infra/collector/
 collectors.example.json` now declares **two** collectors (`kevin-mac` and
@@ -1570,6 +1714,7 @@ Items below are DM1-era and carried forward.
    URL, not locally.
 1. Start DM2.4 — collector liveness (absence must not read as health); DM2.5
    (real surfaces) is next after that, now that DM2.3 has unblocked it.
+1. Start DM2C.1 (board memory: reported_by + held-duration)
 
 
 ## Blockers
