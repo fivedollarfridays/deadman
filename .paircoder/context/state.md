@@ -1,12 +1,12 @@
 # Current State
 
-> Last updated: 2026-08-11
+> Last updated: 2026-08-12
 
 <!-- paircoder:state:begin -->
 ## Active Plan
 
 **Plan:** `plan-2026-08-dm2c-close` — DM2C: close the sprint
-**Status:** Planned — 2 task files materialized, ready for DM2C.1
+**Status:** Complete — 2 of 2 `done`; branch `engage/dm2c-close` ready to merge
 **Current Sprint:** DM2C
 **Backlog:** `plans/backlogs/DM2C-close.md`
 **Branch:** `engage/dm2c-close`
@@ -65,12 +65,12 @@ Instagram. X is verifiable. See `docs/metricool-verification.md`.
 
 ## Task Status
 
-### Active Sprint (DM2C) — 2 tasks, 55 Cx, 1 P0 + 1 P1, 1 `done`
+### Active Sprint (DM2C) — 2 tasks, 55 Cx, 1 P0 + 1 P1, 2 `done`
 
 | ID | Title | Pri | Cx | Model | Depends on |
 |---|---|---|---|---|---|
 | DM2C.1 | The board grows a memory ✓ | P1 | 25 | claude-sonnet-5 | — |
-| DM2C.2 | Integration gate and the real-world proof writeup | P0 | 30 | claude-opus-5 | DM2C.1 |
+| DM2C.2 | Integration gate and the real-world proof writeup ✓ | P0 | 30 | claude-opus-5 | DM2C.1 |
 
 **Waves:** `DM2C.1` → `DM2C.2` — serialized by design (backlog decision 3):
 both tasks edit `src/deadman/service.py`'s output surface, so the dependency
@@ -144,6 +144,84 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+### Session: 2026-08-12 — DM2C.2 done: the proof, the run sheet, and a demo stage with nothing standing in
+
+**DM2C closes. Both tasks `done`, all eight DM2C.2 ACs checked.**
+
+**`docs/PROOF.md` is the case study, and it is enforced.** The morning brief
+outage written from two committed captures and never from memory: the DM2.5
+probe capture (`FAULT`, 176.7h, last send 2026-08-04T11:56:45) and a **new
+board capture** — `GET /` off the deployed service, taken this session at
+2026-08-12T05:42:43Z while the outage was still live. `tests/test_proof_doc.py`
+asserts every duration and every timestamp in the prose is findable in one of
+the two captures, so prose that drifts from the evidence fails the suite.
+
+**The board capture is the wire made visible in output.** The same surface
+appears twice: `cron:morning-brief` `FAULT` at 185.7h via the kevin-mac
+collector with `method: reported` (downgraded on arrival), and
+`cron:morning-brief` `UNOBSERVABLE` from Cloud Run, which has no such log —
+listed under `blind_spots`, never counted healthy. `collector:kevin-mac` sits
+beside them healthy inside its 1800s deadline, which is what makes the fault
+worth believing. Captured deliberately off the deployed revision (`86c3662`),
+which predates DM2C.1, so no row carries `reported_by`/`held_since` and PROOF
+says so rather than describing fields the capture does not have.
+
+**The detection latency, stated as arithmetic:** 30h of deliberate probe
+tolerance plus at most one 900s sweep, with the 1800s collector-silence
+deadline as the term that makes the claim mean anything — against 176.7h found
+by accident.
+
+**The demo now breaks a real surface first.** New stage 1
+(`scripts/demo_real_surface.py`): a real `MorningBriefProbe` over a real file,
+no client and no seam. The break is the outage's own last log row read out of
+the committed capture; detection is off the real clock; the `UNKNOWN` cause
+escalates out of band (no shipped action fixes a hung cron job, and inventing
+one is the guess the design forbids); the heal is the write a repaired brief
+job makes, proved by a fresh observation. The relay stub stays for the
+*automated* act-and-verify path and is still named out loud. Nine stages now.
+
+**`docs/DEMO.md` is a run sheet for the topology that exists** — pre-flight
+(every command executed and corrected against this Mac), seven beats, the
+failure playbook. The unedited-single-take rule and the visual-proof-of-GCP
+requirement are stated up front with their provenance named. **Caveat worth
+carrying:** no network verification of the rules page was available from this
+session (WebSearch/WebFetch not permitted), so the sheet cites the recorded
+Devpost reading in `plans/backlogs/DM2C-close.md` and instructs Kevin to
+re-read the rules immediately before recording.
+
+**The diagram grows the split it never had.** `docs/architecture.svg` has a
+topology band — Mac collector (900s, spool, `local_artifact`), the wire
+(`POST /evidence`, signed, capped at `reported`), Cloud Run (what it reads
+itself, and the surface it cannot). `tests/test_architecture_diagram.py`
+asserts each surface sits in the correct panel group, so the picture cannot
+quietly go stale again.
+
+**Two defects found by verifying rather than asserting:**
+
+1. `python scripts/generate_samples.py` **failed from a plain shell.**
+   `deadman.service` builds its app at import and fails closed without the
+   ingest/scheduler secrets, which `conftest` supplied and a bare shell did
+   not — so the documented regeneration command worked only inside pytest. A
+   regeneration step nobody can run is a hand-written sample with extra steps.
+   Fixed in the generator, pinned by a subprocess test with every `DEADMAN_*`
+   variable stripped.
+2. `infra/scheduler.md` still said steps 1–3 were **"not yet executed"**.
+   DM2.6 executed them. The section now records the verification and adds a
+   cheaper check anyone can run without `gcloud`: `undeclared_surfaces`
+   containing `self:sweep` is the store confirming it holds self-check
+   evidence.
+
+**Verification, in order:** `pytest -n auto --dist=worksteal` 609 passed;
+`ruff check .` clean; `ruff format --check .` 178 files; `bpsai-pair arch check
+--strict` no violations. Clean-clone check run verbatim in two fresh temp dirs
+— `main` from GitHub (573 passed) and this branch (609 passed), plus the demo,
+sample regeneration (byte-identical) and `deadman-self-check` in the fresh
+clone.
+
+**Kevin still owes:** the demo video recording (the run sheet is ready), the
+Devpost submission, repo sharing with the judge addresses — and the repo is
+still private.
 
 ### Session: 2026-08-12 — DM2C.1 done: the board grows a memory
 
@@ -1567,18 +1645,26 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
-**Now (DM2C).** The plan is materialized and validated; nothing is blocked.
-Start `DM2C.1` (board memory: `reported_by` + held-duration from stored
-history), then `DM2C.2` (integration gate + `docs/PROOF.md`), strictly in
-that order — both touch `service.py`'s output surface and the dependency is
-declared in the task files.
+**Now.** DM2C is complete — both tasks `done`, branch `engage/dm2c-close`
+green and ready to merge to `main`. Merge it, then redeploy so the served
+revision carries DM2C.1's `reported_by`/`held_since` (the current live
+revision is `86c3662`, which predates them, and the committed board capture
+records that honestly).
 
-One timing fact DM2C.2 depends on (backlog decision 4): the morning-brief
-fix shipped in ops on 2026-08-11, so the live board's FAULT may flip healthy
-at any 6:00am run. If the captured board output showing the real FAULT
-beside `collector:kevin-mac` is not yet committed, capturing it is
-DM2C.2's first move — PROOF.md is written from committed evidence, never
-from the live board.
+**Then, and only Kevin can do these:**
+
+1. **Record the demo.** `docs/DEMO.md` is the run sheet: pre-flight checks
+   first, then seven beats, one unedited take, Google Cloud visible on
+   screen. Re-read the contest rules page immediately before recording —
+   this session could not reach the network to re-verify them.
+2. **Submit to Devpost**, and **make the repo public** (still private, and
+   it cannot be judged that way).
+
+Backlog decision 4 is now discharged: the morning brief may heal at any
+6:00am run, and it no longer matters. `tests/fixtures/real-board-capture.json`
+holds the live FAULT beside `collector:kevin-mac`, captured while it was
+still true, and `docs/PROOF.md` is written from that rather than from the
+live board.
 
 **Kevin still owes** (unchanged): the demo video recording (with DM2C.2's
 run sheet), the Devpost submission, and repo sharing with the judge
@@ -1714,7 +1800,7 @@ Items below are DM1-era and carried forward.
    URL, not locally.
 1. Start DM2.4 — collector liveness (absence must not read as health); DM2.5
    (real surfaces) is next after that, now that DM2.3 has unblocked it.
-1. Start DM2C.1 (board memory: reported_by + held-duration)
+1. DM2C is done. Merge `engage/dm2c-close`, redeploy, then record the demo.
 
 
 ## Blockers
