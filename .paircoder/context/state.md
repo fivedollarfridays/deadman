@@ -145,6 +145,56 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+### Session: 2026-08-12 — the fire drill: deadman alerted a human, unattended, for the first time
+
+**Kevin asked how we can prove it works on his system. Checking honestly found
+the gap: every alert component existed and was tested, and nothing called any
+of it.** Both alarm emails ever sent had been sent by hand. The deployed
+service recorded faults faithfully and told no one — the board-as-brief
+failure one level up.
+
+**The wiring (PR #16, #17):** `scheduled/alerting.py` evaluates every sweep —
+faults (collected or local), stale surfaces, silent collectors fire; healthy
+rows and the container's permanently-blind local probes do not. Self-evidence
+records before the alarm so a broken transport cannot erase the sweep; a
+transport failure becomes `alert:email` evidence and propagates, turning the
+Scheduler job red. Unconfigured follows the `DEADMAN_COLLECTORS` precedent
+(loud stderr + `alerting: unconfigured` in every response). SMTP user/password
+in Secret Manager; host/port/from/to as plain env.
+
+**The first live sweep crashed, and the lesson is the session's best:**
+`LivenessReport.collectors` holds rendered `Evidence` rows, not
+`CollectorReport` objects. The test fixture encoded the same wrong assumption
+as the implementation, so 623 tests passed and production raised
+`AttributeError`. Same lesson as the ingest 504, one layer up: **a fixture the
+production path did not produce proves nothing about the production path.**
+Fixtures now build through the real renderer (`collector_evidence`).
+
+**The drill, timestamped:**
+- 06:39:58Z — collector's last report
+- 06:42:10Z — `launchctl bootout` killed the collector; nothing on the Mac
+  knows or cares
+- 07:09:58Z — 1800s silence window expires
+- 07:15:02Z — Cloud Scheduler's **natural** quarter-hour sweep (verified via
+  `lastAttemptTime`; no manual trigger)
+- **07:15:05–07:15:10Z — three alert emails arrive in Kevin's inbox that
+  nobody asked for**: `collector:kevin-mac is stale (2106s)`,
+  `host:mac/disk is stale`, `cron:morning-brief is stale` — the collector's
+  death AND every surface it took dark with it
+- 07:16:40Z — `launchctl bootstrap` back; RunAtLoad reports within 8s; board
+  heals to exactly the true state (collector healthy, disk healthy, brief
+  still FAULT because the brief is still genuinely broken)
+
+**33 minutes from silent death to a human's inbox, versus the seven days the
+last silent failure took.** That is the number for PROOF.md and the demo.
+
+**Known rough edges, stated:** three emails for one root cause (the cascade
+is reported per-surface; correlating it into one incident email is DM3), no
+recovery email on heal (alerts fire on non-healthy only; a healed notification
+is DM3), and the throttle window is per-instance memory so a cold start may
+repeat a true alarm early.
+
+
 ### Session: 2026-08-12 — DM2C.2 done: the proof, the run sheet, and a demo stage with nothing standing in
 
 **DM2C closes. Both tasks `done`, all eight DM2C.2 ACs checked.**
