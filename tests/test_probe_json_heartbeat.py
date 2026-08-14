@@ -91,3 +91,25 @@ def test_future_dated_heartbeat_is_unobservable_clock_skew(tmp_path) -> None:
     _write(hb, datetime.now(timezone.utc) + timedelta(hours=2))
     evidence = _probe(tmp_path).observe()
     assert evidence.observation is Observation.UNOBSERVABLE
+
+
+def test_bloated_record_extras_are_bounded_not_copied(tmp_path) -> None:
+    """A heartbeat written by another process could be huge or hostile; its
+    extras must be capped before riding into evidence detail, or an oversized
+    detail would blow the ingest body cap and take the sweep's delivery down."""
+    hb = tmp_path / "hb.json"
+    record = {"last_success": datetime.now(timezone.utc).isoformat()}
+    record["huge_string"] = "x" * 100_000
+    record["huge_list"] = list(range(10_000))
+    for n in range(50):
+        record[f"key_{n:02d}"] = n
+    hb.write_text(json.dumps(record))
+
+    evidence = _probe(tmp_path).observe()
+
+    assert evidence.observation is Observation.HEALTHY
+    assert len(evidence.detail["huge_string"]) <= 300
+    assert evidence.detail["huge_list"] == "<list, 10000 items>"
+    # 10 extras max, plus the probe's own 3 fields
+    assert len(evidence.detail) <= 13
+    assert len(json.dumps(evidence.detail)) < 5000

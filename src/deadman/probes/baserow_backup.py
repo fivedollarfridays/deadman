@@ -70,14 +70,11 @@ class BaserowBackupProbe:
 
     def observe(self) -> Evidence:
         src = f"{self.container}:{self.backups_dir}"
-        argv = [
-            self.docker_bin,
-            "exec",
-            self.container,
-            "sh",
-            "-c",
-            f"ls -1 {self.backups_dir}",
-        ]
+        # Direct argv, deliberately no `sh -c`: backups_dir comes from a
+        # config file, and interpolating config into a shell string is a
+        # command injection waiting for a hostile or fat-fingered config.
+        # `ls` receives the directory as a plain argument.
+        argv = [self.docker_bin, "exec", self.container, "ls", "-1", self.backups_dir]
 
         try:
             code, output = self.run_cmd(argv)
@@ -93,9 +90,10 @@ class BaserowBackupProbe:
                 f"cannot list backup volume (exit {code})",
                 output=output.strip()[:300],
             )
+        return self._listing_result(output, src)
 
+    def _listing_result(self, output: str, src: str) -> Evidence:
         stamps = self._parse_listing(output)
-        names = [n for n, _ in stamps]
 
         if not output.strip():
             return self._fault("backup volume is empty: no backup has ever been produced", src)
@@ -114,7 +112,7 @@ class BaserowBackupProbe:
             "newest_at": newest_at.isoformat(),
             "age_hours": round(age_h, 2),
             "window_hours": self.window_hours,
-            "backup_count": len(names),
+            "backup_count": len(stamps),
         }
 
         if age_h > self.window_hours:
@@ -128,7 +126,7 @@ class BaserowBackupProbe:
             surface=SURFACE,
             observation=Observation.HEALTHY,
             method=Method.LOCAL_ARTIFACT,
-            summary=f"backup {age_h:.1f}h old ({len(names)} retained)",
+            summary=f"backup {age_h:.1f}h old ({len(stamps)} retained)",
             source=src,
             detail=detail,
         )

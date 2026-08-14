@@ -87,3 +87,20 @@ def test_default_runner_is_real_subprocess() -> None:
     code, out = probe.run_cmd(["sh", "-c", "echo listing"])
     assert code == 0
     assert out.strip() == "listing"
+
+
+def test_listing_command_is_direct_argv_with_no_shell() -> None:
+    """The backups_dir is config-controlled; it must reach `ls` as a plain
+    argument, never interpolated into a shell string."""
+    seen = []
+
+    def spy_run(argv):
+        seen.append(argv)
+        return 0, _stamp(_now_local())
+
+    BaserowBackupProbe(run_cmd=spy_run, backups_dir="/b; rm -rf /").observe()
+
+    (argv,) = seen
+    assert "sh" not in argv
+    assert "-c" not in argv
+    assert argv[-1] == "/b; rm -rf /"  # one argument, verbatim, not a script

@@ -30,6 +30,36 @@ from deadman.evidence.model import Evidence, Method, Observation, unobservable
 #: not evidence. Quarter of an hour of slack absorbs honest drift.
 _FUTURE_SLACK_HOURS = 0.25
 
+#: Caps on record extras carried into evidence detail. The heartbeat file is
+#: written by another process this probe does not control; without bounds a
+#: bloated or hostile record would ride verbatim into the evidence batch
+#: (which the ingest endpoint size-caps, so an oversized detail would take
+#: the whole sweep's delivery down with it).
+_MAX_EXTRA_KEYS = 10
+_MAX_EXTRA_STR = 300
+
+
+def _bounded_extras(record: dict, *, exclude: str) -> dict[str, object]:
+    """Record extras, bounded: scalars only, strings truncated, key count
+    capped, containers summarised by size rather than copied."""
+    extras: dict[str, object] = {}
+    for key in sorted(k for k in record if k != exclude)[:_MAX_EXTRA_KEYS]:
+        value = record[key]
+        if isinstance(value, str):
+            extras[str(key)[:100]] = value[:_MAX_EXTRA_STR]
+        elif isinstance(value, (int, float, bool)) or value is None:
+            extras[str(key)[:100]] = value
+        elif isinstance(value, (list, dict)):
+            # Small containers (a counts dict, a short skip list) are the
+            # useful case; big ones are summarised, never copied.
+            as_json = json.dumps(value)
+            extras[str(key)[:100]] = (
+                value
+                if len(as_json) <= _MAX_EXTRA_STR
+                else f"<{type(value).__name__}, {len(value)} items>"
+            )
+    return extras
+
 
 @dataclass(frozen=True)
 class JsonHeartbeatProbe:
@@ -56,28 +86,11 @@ class JsonHeartbeatProbe:
         src = str(self.heartbeat_path)
 
         if not self.heartbeat_path.exists():
-            if self.heartbeat_path.parent.is_dir():
-                return self._fault(
-                    "heartbeat absent: the rail has never recorded a success",
-                    src,
-                    last_success=None,
-                )
-            return unobservable(
-                self.surface_id,
-                src,
-                "heartbeat directory does not exist (path misconfigured?)",
-                path=src,
-            )
+            return self._missing_result(src)
 
-        try:
-            record = json.loads(self.heartbeat_path.read_text())
-        except OSError as exc:
-            return unobservable(self.surface_id, src, f"cannot read heartbeat: {exc}")
-        except ValueError as exc:
-            return unobservable(self.surface_id, src, f"heartbeat is not valid JSON: {exc}")
-
-        if not isinstance(record, dict):
-            return unobservable(self.surface_id, src, "heartbeat is not a JSON object")
+        record = self._load_record(src)
+        if isinstance(record, Evidence):  # already an UNOBSERVABLE verdict
+            return record
 
         last = self._parse_timestamp(record.get(self.timestamp_key))
         if last is None:
@@ -85,9 +98,38 @@ class JsonHeartbeatProbe:
                 self.surface_id,
                 src,
                 f"heartbeat has no parseable {self.timestamp_key!r} timestamp",
-                keys=sorted(record),
+                keys=sorted(record)[:_MAX_EXTRA_KEYS],
             )
+        return self._age_result(record, last, src)
 
+    def _missing_result(self, src: str) -> Evidence:
+        # A heartbeat that was never written inside an existing directory is
+        # a real finding; a missing directory is our own bad path.
+        if self.heartbeat_path.parent.is_dir():
+            return self._fault(
+                "heartbeat absent: the rail has never recorded a success",
+                src,
+                last_success=None,
+            )
+        return unobservable(
+            self.surface_id,
+            src,
+            "heartbeat directory does not exist (path misconfigured?)",
+            path=src,
+        )
+
+    def _load_record(self, src: str) -> dict | Evidence:
+        try:
+            record = json.loads(self.heartbeat_path.read_text())
+        except OSError as exc:
+            return unobservable(self.surface_id, src, f"cannot read heartbeat: {exc}")
+        except ValueError as exc:
+            return unobservable(self.surface_id, src, f"heartbeat is not valid JSON: {exc}")
+        if not isinstance(record, dict):
+            return unobservable(self.surface_id, src, "heartbeat is not a JSON object")
+        return record
+
+    def _age_result(self, record: dict, last: datetime, src: str) -> Evidence:
         now = datetime.now(timezone.utc)
         age_h = (now - last).total_seconds() / 3600.0
 
@@ -104,9 +146,7 @@ class JsonHeartbeatProbe:
             "age_hours": round(age_h, 2),
             "window_hours": self.window_hours,
         }
-        for key, value in record.items():
-            if key != self.timestamp_key:
-                detail.setdefault(key, value)
+        detail.update(_bounded_extras(record, exclude=self.timestamp_key))
 
         if age_h > self.window_hours:
             return self._fault(
