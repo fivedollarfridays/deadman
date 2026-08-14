@@ -9,7 +9,8 @@
         "host:mac/disk",
         "cron:morning-brief",
         "cron:gcal-sync",
-        "backup:baserow"
+        "backup:baserow",
+        "cron:comms-freshness"
       ]
     }
   ]
