@@ -1,4 +1,4 @@
-version: 2.42.0
+version: 2.44.0
 project:
   name: deadman
   description: deadman project
@@ -184,3 +184,6 @@ overrides:
     - htmlcov
     - .coverage
     reason: promoted by upgrade 2.42.0; rationale not recorded in source
+  routing.by_complexity.trivial.max_score:
+    value: 20
+    reason: promoted by upgrade 2.43.0; rationale not recorded in source

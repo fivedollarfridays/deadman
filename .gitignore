@@ -34,9 +34,12 @@ htmlcov/
 # >>> paircoder managed
 .claude/settings.local.json
 .paircoder/.cli_version
+.paircoder/bypass_log.jsonl
 .paircoder/cache/**
+.paircoder/engage/runs/*.log
 .paircoder/feedback/**
 .paircoder/history/benchmarks/matrix/**
+.paircoder/history/bypass_log.jsonl
 .paircoder/hooks/**
 .paircoder/reviews/**
 .paircoder/telemetry/**
