@@ -37,7 +37,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from deadman.probes.base import Probe
+from deadman.probes.baserow_backup import BaserowBackupProbe
 from deadman.probes.disk import DiskProbe
+from deadman.probes.json_heartbeat import JsonHeartbeatProbe
 from deadman.probes.morning_brief import MorningBriefProbe
 
 #: Where a collector spools evidence it could not deliver, absent an
@@ -51,6 +53,8 @@ DEFAULT_SPOOL_DIR = Path("/var/lib/deadman/collector/spool")
 PROBE_TYPES: dict[str, Callable[..., Probe]] = {
     "disk": DiskProbe,
     "morning_brief": MorningBriefProbe,
+    "json_heartbeat": JsonHeartbeatProbe,
+    "baserow_backup": BaserowBackupProbe,
 }
 
 _REQUIRED_TOP_KEYS = ("collector_id", "ingest_url", "probes")

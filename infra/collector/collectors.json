@@ -7,7 +7,9 @@
       "grace_intervals": 1.0,
       "surfaces": [
         "host:mac/disk",
-        "cron:morning-brief"
+        "cron:morning-brief",
+        "cron:gcal-sync",
+        "backup:baserow"
       ]
     }
   ]
