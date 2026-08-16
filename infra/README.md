@@ -137,7 +137,21 @@ service to light that surface up:
 
 ```bash
 gcloud run services update deadman --region=us-central1 \
-  --set-env-vars=DEADMAN_BRIEF_LOG=/path/inside/the/container/to/the/log
+  --update-env-vars=DEADMAN_BRIEF_LOG=/path/inside/the/container/to/the/log
+```
+
+(`--update-env-vars`, never `--set-env-vars` — the latter replaces the whole
+environment and wipes `DEADMAN_INGEST_SECRET`; see `cloudbuild.yaml`.)
+
+Once a collector ships the brief surface via `POST /evidence`, the local
+probe is pure blind spot: inside the container the log can never exist. Set
+the var **empty** to drop the probe from the service's own sweep — an
+explicit, visible-in-the-deploy opt-out, deliberately not an automatic
+`exists()` check (that would also silence a genuinely misconfigured path):
+
+```bash
+gcloud run services update deadman --region=us-central1 \
+  --update-env-vars=DEADMAN_BRIEF_LOG=
 ```
 
 Read `host:disk/` on this deployment with the same suspicion. Inside Cloud
@@ -159,7 +173,7 @@ for.
 | `DEADMAN_STORE_BACKEND` | `memory` | `firestore` or `memory`. `cloudbuild.yaml` sets `firestore` on deploy; the `memory` default is for local runs only, and on Cloud Run it would forget the estate on every scale-to-zero. |
 | `DEADMAN_FIRESTORE_PROJECT` | the SDK's default | GCP project holding the Firestore database. |
 | `DEADMAN_COLLECTORS` | unset — **the service warns on stderr and watches nobody's silence** | Path to the collector liveness declaration (see "Collector liveness" below). A named file that cannot be read or parsed is a startup failure. |
-| `DEADMAN_BRIEF_LOG` | `/var/log/deadman/morning-brief.jsonl` | Path the morning-brief probe reads. |
+| `DEADMAN_BRIEF_LOG` | `/var/log/deadman/morning-brief.jsonl` | Path the morning-brief probe reads. Set empty to disable the service-side probe (the surface then rides in via ingest only). |
 | `DEADMAN_DISK_HISTORY` | `/tmp/deadman/disk-history.jsonl` | Where the disk probe appends its trend samples. Cloud Run's filesystem is ephemeral per instance, so the trend resets on every cold start — acceptable for the demo board; a persistent volume is out of scope for this task. |
 
 ## Ingest: `POST /evidence`

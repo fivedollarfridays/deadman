@@ -64,6 +64,11 @@ FIRESTORE_PROJECT_ENV = "DEADMAN_FIRESTORE_PROJECT"
 #: and ``infra/collector/collectors.example.json``.
 COLLECTORS_ENV = "DEADMAN_COLLECTORS"
 
+#: Send log the morning-brief probe reads. Set empty to drop the probe from
+#: this process entirely — the explicit opt-out for deployments (Cloud Run)
+#: where the log cannot exist and the surface arrives via ingest instead.
+BRIEF_LOG_ENV = "DEADMAN_BRIEF_LOG"
+
 
 _METHOD_NOT_ALLOWED = "405 Method Not Allowed"
 
@@ -76,12 +81,16 @@ def default_probes() -> list[Probe]:
     """Probes safe to run anywhere, Cloud Run included: no credentials, no
     outbound network. Everything else (Metricool, destinations, SMS relay)
     needs secrets this endpoint does not hold."""
-    brief_log = Path(os.environ.get("DEADMAN_BRIEF_LOG", "/var/log/deadman/morning-brief.jsonl"))
+    brief_log = os.environ.get(BRIEF_LOG_ENV, "/var/log/deadman/morning-brief.jsonl")
     disk_history = Path(os.environ.get("DEADMAN_DISK_HISTORY", "/tmp/deadman/disk-history.jsonl"))
-    return [
-        DiskProbe(history_path=disk_history),
-        MorningBriefProbe(log_path=brief_log),
-    ]
+    probes: list[Probe] = [DiskProbe(history_path=disk_history)]
+    if brief_log:
+        # Empty means deliberately disabled, not defaulted: a deploy where the
+        # log cannot exist gets its brief evidence from a collector, and a
+        # probe that can only ever answer "unobservable" adds a permanent
+        # blind spot to the board without watching anything.
+        probes.append(MorningBriefProbe(log_path=Path(brief_log)))
+    return probes
 
 
 def _evidence_row(evidence: Evidence, history: Sequence[Evidence] = ()) -> dict[str, object]:
