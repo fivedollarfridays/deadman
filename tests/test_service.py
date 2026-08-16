@@ -18,10 +18,14 @@ from deadman.evidence.model import Evidence, Method, Observation
 from deadman.ingest.auth import SIGNATURE_ENVIRON_KEY, sign
 from deadman.ingest.endpoint import EVIDENCE_PATH, IngestEndpoint
 from deadman.ingest.wire import Batch, dumps
+from deadman.probes.disk import DiskProbe
+from deadman.probes.morning_brief import MorningBriefProbe
 from deadman.service import (
+    BRIEF_LOG_ENV,
     STORE_BACKEND_ENV,
     StoreMisconfigured,
     build_board,
+    default_probes,
     default_store,
     make_app,
 )
@@ -317,6 +321,41 @@ class TestDefaultStore:
 
         with pytest.raises(StoreSdkMissing):
             default_store()
+
+
+class TestDefaultProbes:
+    """Which probes the service runs in its own process.
+
+    The morning-brief probe reads a log that only exists on the workstation.
+    On Cloud Run that path can never exist, so a stock deploy carries a
+    permanent ``unobservable`` row for a surface the collector already ships
+    real evidence about. Opting out must be explicit — an empty
+    ``DEADMAN_BRIEF_LOG`` in the deploy config, visible in the service
+    description — never an automatic ``exists()`` check that would also
+    silence a genuinely misconfigured path.
+    """
+
+    def test_the_stock_probe_set_includes_the_brief_probe(self, monkeypatch):
+        monkeypatch.delenv(BRIEF_LOG_ENV, raising=False)
+
+        probes = default_probes()
+
+        assert any(isinstance(p, MorningBriefProbe) for p in probes)
+
+    def test_an_empty_brief_log_disables_the_probe_not_the_board(self, monkeypatch):
+        monkeypatch.setenv(BRIEF_LOG_ENV, "")
+
+        probes = default_probes()
+
+        assert not any(isinstance(p, MorningBriefProbe) for p in probes)
+        assert any(isinstance(p, DiskProbe) for p in probes)
+
+    def test_a_configured_path_reaches_the_probe_verbatim(self, monkeypatch):
+        monkeypatch.setenv(BRIEF_LOG_ENV, "/somewhere/real/brief.jsonl")
+
+        (brief,) = [p for p in default_probes() if isinstance(p, MorningBriefProbe)]
+
+        assert str(brief.log_path) == "/somewhere/real/brief.jsonl"
 
 
 class TestDeployedWiring:
