@@ -74,24 +74,10 @@ class PublicPathProbe:
         return f"does {self.url} answer {want} through its public address?"
 
     def observe(self) -> Evidence:
-        started = time.monotonic()
-        try:
-            with self.fetch(self.url, self.timeout_s) as resp:  # type: ignore[union-attr]
-                status = int(getattr(resp, "status", 0) or 0)
-                body = resp.read(_MAX_READ_BYTES) or b""
-        except Exception as exc:  # noqa: BLE001 — see module docstring
-            # We did not learn the surface is broken. We learned we cannot
-            # see it. Never a FAULT: an unreachable prober must not be able
-            # to declare the estate down.
-            return unobservable(
-                self.surface_id,
-                self.url,
-                f"could not reach the path: {type(exc).__name__}: {exc}",
-                error=type(exc).__name__,
-            )
-
-        latency_ms = round((time.monotonic() - started) * 1000)
-        text = body.decode("utf-8", errors="replace")
+        fetched = self._fetch()
+        if isinstance(fetched, Evidence):  # already an UNOBSERVABLE verdict
+            return fetched
+        status, text, latency_ms = fetched
         detail = {
             "status": status,
             "latency_ms": latency_ms,
@@ -99,36 +85,53 @@ class PublicPathProbe:
         }
 
         if status != self.expect_status:
-            return Evidence(
-                surface=self.surface_id,
-                observation=Observation.FAULT,
-                method=Method.DESTINATION_PUBLIC,
-                summary=(
-                    f"{self.url} answered {status}, expected "
-                    f"{self.expect_status} — the path a human is given is dead"
-                ),
-                source=self.url,
-                detail=detail,
+            return self._fault(
+                f"{self.url} answered {status}, expected {self.expect_status}"
+                " — the path a human is given is dead",
+                detail,
             )
-
         if self.expect_substring and self.expect_substring not in text:
-            return Evidence(
-                surface=self.surface_id,
-                observation=Observation.FAULT,
-                method=Method.DESTINATION_PUBLIC,
-                summary=(
-                    f"{self.url} answered {status} but the body lacks expected "
-                    f"content {self.expect_substring!r} (parked page? login wall?)"
-                ),
-                source=self.url,
-                detail={**detail, "expected_substring": self.expect_substring},
+            return self._fault(
+                f"{self.url} answered {status} but the body lacks expected "
+                f"content {self.expect_substring!r} (parked page? login wall?)",
+                {**detail, "expected_substring": self.expect_substring},
             )
-
         return Evidence(
             surface=self.surface_id,
             observation=Observation.HEALTHY,
             method=Method.DESTINATION_PUBLIC,
             summary=f"{self.url} answered {status} in {latency_ms}ms",
+            source=self.url,
+            detail=detail,
+        )
+
+    def _fetch(self) -> tuple[int, str, int] | Evidence:
+        """The response, or the blind-state verdict for never getting one.
+
+        A response we never got is UNOBSERVABLE, never FAULT: an unreachable
+        prober must not be able to declare the estate down.
+        """
+        started = time.monotonic()
+        try:
+            with self.fetch(self.url, self.timeout_s) as resp:  # type: ignore[union-attr]
+                status = int(getattr(resp, "status", 0) or 0)
+                body = resp.read(_MAX_READ_BYTES) or b""
+        except Exception as exc:  # noqa: BLE001 — see module docstring
+            return unobservable(
+                self.surface_id,
+                self.url,
+                f"could not reach the path: {type(exc).__name__}: {exc}",
+                error=type(exc).__name__,
+            )
+        latency_ms = round((time.monotonic() - started) * 1000)
+        return status, body.decode("utf-8", errors="replace"), latency_ms
+
+    def _fault(self, summary: str, detail: dict) -> Evidence:
+        return Evidence(
+            surface=self.surface_id,
+            observation=Observation.FAULT,
+            method=Method.DESTINATION_PUBLIC,
+            summary=summary,
             source=self.url,
             detail=detail,
         )

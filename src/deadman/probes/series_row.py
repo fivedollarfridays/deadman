@@ -71,7 +71,6 @@ class SeriesRowProbe:
 
     def observe(self) -> Evidence:
         src = str(self.series_path)
-
         try:
             today = datetime.now(ZoneInfo(self.timezone_name)).date().isoformat()
         except Exception as exc:  # noqa: BLE001 — bad tz config is our fault
@@ -79,7 +78,27 @@ class SeriesRowProbe:
                 self.surface_id, src, f"unusable timezone {self.timezone_name!r}: {exc}"
             )
 
+        rows = self._load_rows(src, today)
+        if isinstance(rows, Evidence):  # missing/unreadable/wrong shape
+            return rows
+
+        for row in rows:
+            if isinstance(row, dict) and row.get(self.date_key) == today:
+                return Evidence(
+                    surface=self.surface_id,
+                    observation=Observation.HEALTHY,
+                    method=Method.LOCAL_ARTIFACT,
+                    summary=f"series carries today's row ({today})",
+                    source=src,
+                    detail=_bounded_row(row),
+                )
+        return self._no_row_fault(rows, src, today)
+
+    def _load_rows(self, src: str, today: str) -> list | Evidence:
+        """The series rows, or the verdict for not having any to read."""
         if not self.series_path.exists():
+            # Never written inside a directory that IS ours is a real finding;
+            # a missing directory is our own bad path.
             if self.series_path.parent.is_dir():
                 return self._fault(
                     f"series file absent: the tracker has never written a row (expected {today})",
@@ -92,30 +111,17 @@ class SeriesRowProbe:
                 "series directory does not exist (path misconfigured?)",
                 path=src,
             )
-
         try:
             rows = json.loads(self.series_path.read_text())
         except OSError as exc:
             return unobservable(self.surface_id, src, f"cannot read series: {exc}")
         except ValueError as exc:
             return unobservable(self.surface_id, src, f"series is not valid JSON: {exc}")
-
         if not isinstance(rows, list):
             return unobservable(self.surface_id, src, "series is not a JSON array of rows")
+        return rows
 
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            if row.get(self.date_key) == today:
-                return Evidence(
-                    surface=self.surface_id,
-                    observation=Observation.HEALTHY,
-                    method=Method.LOCAL_ARTIFACT,
-                    summary=f"series carries today's row ({today})",
-                    source=src,
-                    detail=_bounded_row(row),
-                )
-
+    def _no_row_fault(self, rows: list, src: str, today: str) -> Evidence:
         latest = None
         for row in rows:
             if isinstance(row, dict) and isinstance(row.get(self.date_key), str):
