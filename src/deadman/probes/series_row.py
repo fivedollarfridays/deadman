@@ -67,10 +67,7 @@ class SeriesRowProbe:
 
     @property
     def question(self) -> str:
-        return (
-            f"does {self.series_path.name} carry a row for today "
-            f"({self.timezone_name})?"
-        )
+        return f"does {self.series_path.name} carry a row for today ({self.timezone_name})?"
 
     def observe(self) -> Evidence:
         src = str(self.series_path)
@@ -85,8 +82,7 @@ class SeriesRowProbe:
         if not self.series_path.exists():
             if self.series_path.parent.is_dir():
                 return self._fault(
-                    f"series file absent: the tracker has never written a row "
-                    f"(expected {today})",
+                    f"series file absent: the tracker has never written a row (expected {today})",
                     src,
                     expected_date=today,
                 )
@@ -102,14 +98,10 @@ class SeriesRowProbe:
         except OSError as exc:
             return unobservable(self.surface_id, src, f"cannot read series: {exc}")
         except ValueError as exc:
-            return unobservable(
-                self.surface_id, src, f"series is not valid JSON: {exc}"
-            )
+            return unobservable(self.surface_id, src, f"series is not valid JSON: {exc}")
 
         if not isinstance(rows, list):
-            return unobservable(
-                self.surface_id, src, "series is not a JSON array of rows"
-            )
+            return unobservable(self.surface_id, src, "series is not a JSON array of rows")
 
         for row in rows:
             if not isinstance(row, dict):

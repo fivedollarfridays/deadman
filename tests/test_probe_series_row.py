@@ -109,9 +109,7 @@ def test_extras_are_bounded(tmp_path):
     _write(tmp_path, [row])
     ev = _probe(tmp_path).observe()
     assert len(ev.detail) <= 12
-    assert all(
-        not isinstance(v, str) or len(v) <= 400 for v in ev.detail.values()
-    )
+    assert all(not isinstance(v, str) or len(v) <= 400 for v in ev.detail.values())
 
 
 def test_never_raises(tmp_path):
