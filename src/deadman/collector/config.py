@@ -41,6 +41,8 @@ from deadman.probes.baserow_backup import BaserowBackupProbe
 from deadman.probes.disk import DiskProbe
 from deadman.probes.json_heartbeat import JsonHeartbeatProbe
 from deadman.probes.morning_brief import MorningBriefProbe
+from deadman.probes.public_path import PublicPathProbe
+from deadman.probes.series_row import SeriesRowProbe
 
 #: Where a collector spools evidence it could not deliver, absent an
 #: explicit ``spool_dir`` in the config file.
@@ -55,6 +57,11 @@ PROBE_TYPES: dict[str, Callable[..., Probe]] = {
     "morning_brief": MorningBriefProbe,
     "json_heartbeat": JsonHeartbeatProbe,
     "baserow_backup": BaserowBackupProbe,
+    # LAND5 (2026-08-20): the two shapes the estate proved it could not
+    # express — a path that is dead behind a healthy process, and a daily
+    # series whose failure mode is writing no row at all.
+    "public_path": PublicPathProbe,
+    "series_row": SeriesRowProbe,
 }
 
 _REQUIRED_TOP_KEYS = ("collector_id", "ingest_url", "probes")
