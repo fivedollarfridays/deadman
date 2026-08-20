@@ -10,7 +10,10 @@
         "cron:morning-brief",
         "cron:gcal-sync",
         "backup:baserow",
-        "cron:comms-freshness"
+        "cron:comms-freshness",
+        "service:staging-queue",
+        "cron:kai-cadence",
+        "cron:devpost"
       ]
     }
   ]
