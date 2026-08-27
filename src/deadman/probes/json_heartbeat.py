@@ -39,21 +39,51 @@ _MAX_EXTRA_KEYS = 10
 _MAX_EXTRA_STR = 300
 
 
+#: Evidence's own field names. Extras are splatted as ``**detail`` into helpers
+#: that already bind some of these as parameters, so a producer key of the same
+#: name is a TypeError at the call site — not a bad value, a crash.
+#:
+#: DM3.1, found live: ``cron:devpost`` alerted five times on 2026-08-27 with
+#: ``_fault() got multiple values for argument 'source'`` because its heartbeat
+#: is ``{last_success, row, source}``. The probe was reporting REAL staleness
+#: and raised on the way, so the board showed UNOBSERVABLE ("we cannot see it")
+#: for something that was FAULT ("it is broken"). **The bug inverted the
+#: diagnosis exactly when the monitor was load-bearing** — and because the
+#: healthy path never splats detail, it stayed invisible until a surface failed.
+#:
+#: Namespaced rather than dropped: doctrine §5 is tolerate-drift-or-fail-loud,
+#: never silently discard. The producer's value survives under ``hb_``.
+_RESERVED_EVIDENCE_FIELDS = frozenset(
+    {"surface", "observation", "method", "summary", "source", "detail"}
+)
+_EXTRA_PREFIX = "hb_"
+
+
+def _safe_extra_key(key: str) -> str:
+    """Namespace a producer key that would shadow an Evidence field."""
+    return f"{_EXTRA_PREFIX}{key}" if key in _RESERVED_EVIDENCE_FIELDS else key
+
+
 def _bounded_extras(record: dict, *, exclude: str) -> dict[str, object]:
     """Record extras, bounded: scalars only, strings truncated, key count
-    capped, containers summarised by size rather than copied."""
+    capped, containers summarised by size rather than copied.
+
+    Keys colliding with an Evidence field are namespaced (see
+    ``_RESERVED_EVIDENCE_FIELDS``) so a producer can never crash its reader.
+    """
     extras: dict[str, object] = {}
     for key in sorted(k for k in record if k != exclude)[:_MAX_EXTRA_KEYS]:
         value = record[key]
+        safe = _safe_extra_key(str(key)[:100])
         if isinstance(value, str):
-            extras[str(key)[:100]] = value[:_MAX_EXTRA_STR]
+            extras[safe] = value[:_MAX_EXTRA_STR]
         elif isinstance(value, (int, float, bool)) or value is None:
-            extras[str(key)[:100]] = value
+            extras[safe] = value
         elif isinstance(value, (list, dict)):
             # Small containers (a counts dict, a short skip list) are the
             # useful case; big ones are summarised, never copied.
             as_json = json.dumps(value)
-            extras[str(key)[:100]] = (
+            extras[safe] = (
                 value
                 if len(as_json) <= _MAX_EXTRA_STR
                 else f"<{type(value).__name__}, {len(value)} items>"

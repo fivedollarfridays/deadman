@@ -1,0 +1,12 @@
+id: plan-2026-08-dm3-probe-detail-collision
+title: DM3.1 — heartbeat extras must not shadow Evidence fields
+type: bugfix
+status: in_progress
+created_at: '2026-08-27T16:14:45.148430+00:00'
+skills:
+- planning-with-pm
+goals:
+- A producer's heartbeat keys can never crash the probe that reads them
+- A stale surface reports FAULT, not UNOBSERVABLE-with-a-stacktrace
+metadata:
+  pm_scope: story
