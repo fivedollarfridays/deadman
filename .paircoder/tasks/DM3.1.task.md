@@ -82,12 +82,12 @@ bug is invisible until a surface actually fails.
 
 # Acceptance Criteria
 
-- [ ] A heartbeat containing `source` produces `Observation.FAULT`, not a TypeError
-- [ ] The same holds for every other Evidence field name (`surface`, `observation`, `method`, `summary`, `detail`) — table-driven, not one case
-- [ ] The colliding key is still visible in the evidence detail (renamed/namespaced), not silently dropped
-- [ ] The real `data/devpost-heartbeat.json` payload is exercised as a fixture, not a synthetic stand-in
-- [ ] Existing `test_probe_json_heartbeat.py` cases stay green
-- [ ] Healthy path unchanged — no new keys in a healthy Evidence
+- [x] A heartbeat containing `source` produces `Observation.FAULT`, not a TypeError
+- [x] The same holds for every other Evidence field name (`surface`, `observation`, `method`, `summary`, `detail`) — table-driven, not one case
+- [x] The colliding key is still visible in the evidence detail (renamed/namespaced), not silently dropped
+- [x] The real `data/devpost-heartbeat.json` payload is exercised as a fixture, not a synthetic stand-in
+- [x] Existing `test_probe_json_heartbeat.py` cases stay green
+- [x] Healthy path unchanged — no new keys in a healthy Evidence
 
 # Verification
 

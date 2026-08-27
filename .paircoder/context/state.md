@@ -1956,3 +1956,48 @@ bpsai-pair plan feasibility plan-2026-08-dm1-deadman-v1
 bpsai-pair task update DM1.1 --status in_progress
 bpsai-pair task update DM1.1 --status done
 ```
+
+## 2026-08-27 — DM3.1 DONE: heartbeat extras can no longer shadow Evidence fields
+
+**Found by the alert path working.** `cron:devpost` emailed five times on
+2026-08-27 (07:00, 08:15, 09:15, 10:15, 11:30):
+`probe raised TypeError: JsonHeartbeatProbe._fault() got multiple values for
+argument 'source'`.
+
+**Root cause.** `_fault(self, summary, source, **detail)` binds `source`
+positionally; both call sites also splat `**detail`, which `_bounded_extras`
+fills with arbitrary keys copied out of the heartbeat JSON. Its `exclude` is a
+single string (the timestamp key), so `last_success` was protected and nothing
+else was. The devpost heartbeat is `{last_success, row, source}`.
+
+**Why it mattered more than a crash.** The probe was reporting a REAL staleness
+and raised on the way, so the board published **UNOBSERVABLE** ("we cannot see
+it — our problem") for something that was **FAULT** ("it is broken — theirs").
+Opposite diagnoses; the wrong one sends you looking in the wrong place. And
+because the healthy path never splats `detail`, **the bug was invisible until a
+surface actually failed** — it sat latent under every local surface
+(`gcal-sync`, `comms-freshness`, `staging-queue`, `kai-cadence`, `devpost`, the
+three digests, `door`). Only devpost carried a colliding key, so the rest were
+safe by luck, not by construction.
+
+**Fix.** Colliding keys are namespaced under `hb_`, not dropped — doctrine §5 is
+tolerate-drift-or-fail-loud, never silently discard. `_RESERVED_EVIDENCE_FIELDS`
+now covers every Evidence field name, so this cannot recur for a different key.
+
+**Verification.** 10 tests written RED first, **table-driven over every Evidence
+field** rather than only the one that bit us. Live boundary check against the
+real on-disk heartbeat now reads `FAULT — "no successful run in 35.6h (window
+26h)"` with `hb_source` preserved and `Evidence.source` still the probe's own
+path. **677 tests green**, ruff clean, `arch check` clean.
+
+**Completion note:** `--allow-dirty` used. The dirty tree is 48 staged PairCoder
+payload files (`.claude/agents|commands|hooks|skills`, `.paircoder/*.yaml`) from
+a re-pin that predates this branch — last real commits 2 weeks ago. None are
+DM3.1's.
+
+**What's next:** deploy — `collectors.json` and probe code are baked into the
+image, so the board keeps reporting UNOBSERVABLE until a Cloud Build lands.
+Then confirm `cron:devpost` reads **fault** with its age, and that the next
+alert names a stale rail rather than a stack trace. Separately: **devpost is
+genuinely stale** (last success 2026-08-26T04:42, 35.6h against a 26h window) —
+the fix corrects the diagnosis, it does not fix the rail.
