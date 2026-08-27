@@ -1,0 +1,12 @@
+id: plan-2026-08-dm3-2-pin-collector
+title: DM3.2 — the collector must not run from a mutable working tree
+type: chore
+status: in_progress
+created_at: '2026-08-27T17:34:14.159341+00:00'
+skills:
+- planning-with-pm
+goals:
+- git checkout in the dev tree can never change what the collector executes
+- Promotion is deliberate, pinned, and reversible
+metadata:
+  pm_scope: story
