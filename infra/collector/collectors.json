@@ -16,7 +16,8 @@
         "cron:devpost",
         "cron:digest-hackfw",
         "cron:digest-tmb",
-        "cron:digest-fwdao"
+        "cron:digest-fwdao",
+        "cron:door"
       ]
     }
   ]
