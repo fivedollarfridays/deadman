@@ -13,7 +13,10 @@
         "cron:comms-freshness",
         "service:staging-queue",
         "cron:kai-cadence",
-        "cron:devpost"
+        "cron:devpost",
+        "cron:digest-hackfw",
+        "cron:digest-tmb",
+        "cron:digest-fwdao"
       ]
     }
   ]
