@@ -2001,3 +2001,31 @@ Then confirm `cron:devpost` reads **fault** with its age, and that the next
 alert names a stale rail rather than a stack trace. Separately: **devpost is
 genuinely stale** (last success 2026-08-26T04:42, 35.6h against a 26h window) —
 the fix corrects the diagnosis, it does not fix the rail.
+
+## 2026-08-27 — DM3.2 DONE: the collector no longer runs from a mutable working tree
+
+**The bug.** `com.deadman.collector.plist` exec'd `~/Projects/deadman/.venv/bin/deadman-collector`, and that venv held
+`__editable__.deadman-0.1.0.pth` → `~/Projects/deadman/src`. **The outside watcher executed whatever branch the dev
+checkout was standing on — `git checkout` was a silent production deploy.** Found while shipping DM3.1: the fix looked
+live only because the checkout happened to still be on the fix branch.
+
+**Third instance of one shape in this estate** — production code or state inside a git checkout:
+1. kai-studio devpost series — every promote reset it; *"six green cron runs, one surviving row"* (HACKRUN.3). Fixed.
+2. kai-studio prod venv — editable against DEV; `run-devpost.sh` failed for weeks. Fixed 8/21.
+3. **this one — and it watches everything else.** Now fixed.
+
+**Fix.** `~/prod/deadman`, separate clone, detached at a pinned SHA, its own venv with a **NON-editable** install so no
+`.pth` can reach into a working tree. `scripts/promote-collector.sh` mirrors kai-studio's `promote-prod.sh` interface
+(`<ref>` / `--status` / `--rollback`, previous ref persisted) rather than inventing a second pattern. It **fails closed**
+if an editable install survives a reinstall. launchd repointed and reloaded; plist backed up first.
+
+**Proven, not assumed:**
+- prod venv has **no** `__editable__*` — `deadman` resolves from `site-packages`, not any tree
+- **Isolation test:** dev tree switched from the feature branch to `main`; the collector's resolved module path was
+  byte-identical before and after, and it still carried the DM3.1 fix
+- Board after cutover: **14 surfaces, ZERO non-healthy**; `collector:kevin-mac` healthy, reported 17s ago from the new
+  venv; `cron:devpost` healthy 0.4h
+- Dev workflow untouched: `~/Projects/deadman/.venv` stays editable for tests
+
+**What's next:** the same audit applied to the other launchd/cron jobs — anything else exec'ing out of
+`~/Projects/*` is running unpinned code. `com.bpsai.devpost-rail` and the ops rails are the obvious candidates.
