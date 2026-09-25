@@ -1,0 +1,13 @@
+id: plan-2026-09-dm3-3-demo-stage1-alarm
+title: DM3.3 — stage 1 alarms on the fault, not on the model's grounding
+type: bugfix
+status: in_progress
+created_at: '2026-09-25T20:17:11.816959+00:00'
+skills:
+- planning-with-pm
+goals:
+- A detected FAULT on the real surface always raises exactly one alarm, whatever the
+  diagnosis
+- The demo never crashes on an empty alert list
+metadata:
+  pm_scope: story

@@ -205,6 +205,17 @@ it was watching for. It now returns `NOT_ATTEMPTED`. See
 That defect was reachable only by running the thing live, more than once. It is
 the argument for the rehearsal requirement in one bug.
 
+It came back once, one layer up. On 2026-09-25 the live take crashed at stage 1
+with an `IndexError` on the alarm line: the stage-1 model call came back
+uncited, the loop correctly reported `NOT_ATTEMPTED` with no attempts, and the
+real-surface segment only raised its alarm *per attempt*, so a real FAULT
+produced no alarm at all. A fault with no alarm is the failure this project
+exists to catch. The segment now alarms on the FAULT itself, whatever the model
+said, which is what the shipped `scheduled/alerting.py` path has always done;
+the alarm carries the executor's reason, including "diagnosis is ungrounded".
+If an alarm is ever missing, stage 1 prints `NO ALARM` and fails the run
+rather than crashing. See `tests/test_demo_stage1_ungrounded.py`.
+
 ## Rehearsing without spending a call
 
 ```bash

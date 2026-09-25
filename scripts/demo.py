@@ -100,7 +100,12 @@ def _stage_real_surface(client, work: Path) -> bool:
     print(f"  detected   : {run.broken.observation.value.upper()} via {run.broken.method.value}")
     print(f"               {run.broken.summary}")
     print(f"  cause      : {run.cause.value} -> {run.outcome.status.value}")
-    print(f"  alarm      : {run.alerts[0][:88]}…")
+    if run.alerts:
+        print(f"  alarm      : {run.alerts[0][:88]}…")
+    else:
+        # Never an IndexError mid-take: a fault with no alarm is the exact
+        # failure this project exists to catch, so it is named, and it fails.
+        print("  alarm      : NO ALARM — a real FAULT was detected and nobody was told")
     print(f"  healed     : {run.healed.observation.value.upper()} — {run.healed.summary}")
     print("\n  Nothing was injected. The probe holds no client and no seam; it read a")
     print("  file. Seven days of this went unnoticed in the real estate, because the")
