@@ -34,7 +34,7 @@ from pathlib import Path
 
 from deadman.diagnose.engine import DiagnosisEngine
 from deadman.diagnose.schema import Diagnosis
-from deadman.evidence.model import Evidence
+from deadman.evidence.model import Evidence, Observation
 from deadman.probes.base import run_probe
 from deadman.probes.morning_brief import MorningBriefProbe
 from deadman.remediate.actions import default_registry
@@ -153,8 +153,13 @@ def run_segment(log_path: Path, client: object) -> RealSurfaceRun:
 
     executor = Executor(registry=default_registry(), capabilities=Capabilities())
     outcome = verify_remediation(executor, probe_for(log_path), diagnosis, [broken])
-    for attempt in outcome.attempts:
-        _escalate(attempt.remediation.plan.reason, broken, channel)
+    # The alarm answers the FAULT, never the model. It used to fire once per
+    # remediation attempt, and an ungrounded diagnosis (about one live run in
+    # four) makes no attempt at all — so a real fault raised no alarm.
+    # ``deadman.scheduled.alerting.evaluate`` alarms on every FAULT without
+    # consulting a diagnosis; this segment now holds itself to the same rule.
+    if broken.observation is Observation.FAULT:
+        _escalate(executor.plan(diagnosis, [broken]).reason, broken, channel)
 
     healed = heal_it(log_path)
 

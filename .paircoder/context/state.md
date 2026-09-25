@@ -1,6 +1,6 @@
 # Current State
 
-> Last updated: 2026-08-12
+> Last updated: 2026-09-25 20:19 UTC
 
 <!-- paircoder:state:begin -->
 ## Active Plan
@@ -144,6 +144,8 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+- **DM3.3 done** (auto-updated by hook)
 
 ### Session: 2026-08-12 — the fire drill: deadman alerted a human, unattended, for the first time
 
@@ -2029,3 +2031,29 @@ if an editable install survives a reinstall. launchd repointed and reloaded; pli
 
 **What's next:** the same audit applied to the other launchd/cron jobs — anything else exec'ing out of
 `~/Projects/*` is running unpinned code. `com.bpsai.devpost-rail` and the ops rails are the obvious candidates.
+
+## 2026-09-25 — DM3.3 DONE ✓: stage 1 alarms on the fault, not on the model's grounding
+
+**Task list:** DM3.3 — Stage 1 alarms on the fault, not on the model's grounding ✓ done
+(plan `plan-2026-09-dm3-3-demo-stage1-alarm`).
+
+**The bug.** `scripts/demo.py --live` crashed at stage 1 twice on 2026-09-25 with `IndexError` on `run.alerts[0]`
+(`scripts/demo.py:103`). `run_segment` in `scripts/demo_real_surface.py` (c913c96, #15) raised its alarm only inside
+`for attempt in outcome.attempts`. When the stage-1 live model call comes back uncited (about one run in four),
+grounding rejects it and `verify_remediation` returns `NOT_ATTEMPTED` with `attempts=()` (the DM1.12 ungrounded guard,
+ef40500). No attempt, no alarm: **a real FAULT raised nothing**, the exact class this product exists to catch.
+
+**Not a DM3 regression, and not in the product path.** #25 touched only `json_heartbeat.py`; the morning-brief probe
+does not use it. `scheduled/alerting.evaluate` alarms on every FAULT without consulting a diagnosis, so production
+alerting was never affected; the demo segment had coupled its alarm to the model's grounding.
+
+**Fix.** The segment alarms on the FAULT itself, carrying `executor.plan(...).reason` (which reads "diagnosis is
+ungrounded" on that path). Stage 1 guards the empty list: `NO ALARM` and a failed run, never an `IndexError`.
+`docs/DEMO.md` records it under "What rehearsal caught".
+
+**Proven:** `tests/test_demo_stage1_ungrounded.py` (4 tests, 3 RED first; the uncited client reproduced the exact
+`demo.py:103` crash). 681 passed, ruff check and format clean, `arch check --strict` clean, stub demo completes all
+nine stages with DEMO COMPLETE.
+
+**What's next:** re-run the live take (`python scripts/demo.py --live`) on the rig once this merges; an ungrounded
+stage 1 should now print the alarm with the ungrounded reason and complete.
