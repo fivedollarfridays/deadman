@@ -1,6 +1,6 @@
 # Current State
 
-> Last updated: 2026-08-12
+> Last updated: 2026-09-25 20:19 UTC
 
 <!-- paircoder:state:begin -->
 ## Active Plan
@@ -144,6 +144,8 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+- **DM3.3 done** (auto-updated by hook)
 
 ### Session: 2026-08-12 — the fire drill: deadman alerted a human, unattended, for the first time
 

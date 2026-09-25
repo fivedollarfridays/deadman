@@ -5,7 +5,7 @@ plan: plan-2026-09-dm3-3-demo-stage1-alarm
 type: bugfix
 priority: P1
 complexity: 2
-status: in_progress
+status: done
 sprint: null
 tags: []
 depends_on: []
@@ -13,6 +13,8 @@ complexity_scale: points
 runtime:
   pre_task_sha:
     deadman-demo-fix: caf27687a2bc057fc217ff1616ef1bd00c673aa1
+  conflicts_encountered: none
+completed_at: '2026-09-25T20:19:40.188465+00:00'
 ---
 
 # Objective
