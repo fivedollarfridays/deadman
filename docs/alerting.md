@@ -147,7 +147,8 @@ scheduled cadence that would make throttling matter actually exists.
 Earlier drafts of this document recorded this acceptance criterion as
 blocked, because the SMTP account the alarm was scoped against was still a
 dummy setup in a sibling repo, one layer above deadman, that this project
-does not own. That has since closed: two real messages were sent through a
+does not own. That has since closed, per the acceptance-criteria record in
+`.paircoder/tasks/DM2.7.task.md`: two real messages were sent through a
 working SMTP account and confirmed received — one through the sibling
 repo's own send helper directly, and one through deadman's own
 `EmailTransport` via `email_transport_from_env`, with `DEADMAN_ALERT_*`
