@@ -1,6 +1,6 @@
 # Current State
 
-> Last updated: 2026-09-25 20:19 UTC
+> Last updated: 2026-09-27 15:13 UTC
 
 <!-- paircoder:state:begin -->
 ## Active Plan
@@ -145,6 +145,7 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+- **DM3.4 done**: Open Graph preview for the public board (see the 2026-09-27 entry at the end)
 - **DM3.3 done** (auto-updated by hook)
 
 ### Session: 2026-08-12 — the fire drill: deadman alerted a human, unattended, for the first time
@@ -1697,6 +1698,9 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
+- DM3.4: deploy the Open Graph preview from the rig after merge (`--update-env-vars` only), then verify the
+  LinkedIn preview with Post Inspector.
+
 **Now.** DM2C is complete — both tasks `done`, branch `engage/dm2c-close`
 green and ready to merge to `main`. Merge it, then redeploy so the served
 revision carries DM2C.1's `reported_by`/`held_since` (the current live
@@ -2057,3 +2061,27 @@ nine stages with DEMO COMPLETE.
 
 **What's next:** re-run the live take (`python scripts/demo.py --live`) on the rig once this merges; an ungrounded
 stage 1 should now print the alarm with the ungrounded reason and complete.
+
+## 2026-09-27 — DM3.4 DONE ✓: the public board unfurls as a preview card
+
+**Task list:** DM3.4 — Open Graph preview for the public board ✓ done
+(plan `plan-2026-09-dm3-4-og-preview`).
+
+**The gap.** `GET /` answered JSON to every caller, and link unfurlers read Open Graph tags from HTML, so a
+posted board link on LinkedIn showed no preview.
+
+**Change.** New `deadman.preview` package (negotiate, page, card), two call sites in `service.make_app`.
+Unfurler user agents (LinkedInBot, facebookexternalhit, Slackbot, Twitterbot) and callers whose Accept lists
+`text/html` above `application/json` get the board as HTML with og:title, og:description, og:url, og:image
+and twitter:card, README wording, every board string escaped. No Accept, `*/*`, `application/json`, a tie, and
+`?format=json` keep today's JSON. Card: 1200x630 PNG from `scripts/render_og_card.py` (Pillow via the optional
+`card` extra), shipped as package data, served at `/og-card.png` (GET and HEAD) without a sweep.
+`DEADMAN_PUBLIC_URL` optionally pins the absolute URLs; otherwise they come from the request
+(`X-Forwarded-Proto` first).
+
+**Proven:** 43 new tests across `tests/test_preview_*.py` and `tests/test_service_preview.py`; JSON body and
+exact header list asserted for curl, urllib, no-Accept and application/json; the same requests byte-compared
+against main's code. 724 passed, ruff check and format clean, `arch check --strict` clean.
+
+**What's next:** after merge, deploy from the rig with `--update-env-vars` only (never `--set-env-vars`, which
+wipes the ingest secret), then check the board URL in LinkedIn's Post Inspector.
