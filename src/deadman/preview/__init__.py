@@ -8,6 +8,7 @@ should answer HTML instead (:mod:`.negotiate`), renders that page
 from deadman.preview.card import CARD_HEIGHT, CARD_PATH, CARD_WIDTH, card_bytes, serve_card
 from deadman.preview.negotiate import UNFURLER_AGENTS, wants_html
 from deadman.preview.page import (
+    BOARD_VARY,
     DESCRIPTION,
     PUBLIC_URL_ENV,
     TITLE,
@@ -17,6 +18,7 @@ from deadman.preview.page import (
 )
 
 __all__ = [
+    "BOARD_VARY",
     "CARD_HEIGHT",
     "CARD_PATH",
     "CARD_WIDTH",

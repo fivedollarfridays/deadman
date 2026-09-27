@@ -30,7 +30,9 @@ steps:
       # deploy — and the service refuses to start without it, so the outage
       # would be immediate and the cause would look like a code change.
       # The secret itself is never set from here; see infra/README.md.
-      - --update-env-vars=DEADMAN_STORE_BACKEND=firestore
+      # DEADMAN_PUBLIC_URL pins the absolute URLs in the board's link preview
+      # (og:url, og:image) so they never come from a request's Host header.
+      - --update-env-vars=DEADMAN_STORE_BACKEND=firestore,DEADMAN_PUBLIC_URL=${_PUBLIC_URL}
       - --quiet
 
 images:
@@ -42,6 +44,7 @@ substitutions:
   _SERVICE: deadman
   _REGION: us-central1
   _TAG: latest
+  _PUBLIC_URL: https://deadman-mrapac5nda-uc.a.run.app
 
 options:
   logging: CLOUD_LOGGING_ONLY

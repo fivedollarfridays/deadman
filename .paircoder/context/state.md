@@ -2083,5 +2083,11 @@ and twitter:card, README wording, every board string escaped. No Accept, `*/*`, 
 exact header list asserted for curl, urllib, no-Accept and application/json; the same requests byte-compared
 against main's code. 724 passed, ruff check and format clean, `arch check --strict` clean.
 
+**Review round 1 (PR #28):** added `Vary: Accept, User-Agent` to the board's JSON (body unchanged, header list
+gains Vary only), validated `Host`/`X-Forwarded-Proto` before echoing them, and pinned `DEADMAN_PUBLIC_URL` in
+`cloudbuild.yaml` via `--update-env-vars`. Declined: sweep-on-HTML-fetch (the board's self log is a per-instance
+file, the scheduled self-check writes the store, so bot fetches cannot mask it) and the wiring P0 on
+`scripts/render_og_card.py` (every standalone script in `scripts/` gets the same flag). 732 passed.
+
 **What's next:** after merge, deploy from the rig with `--update-env-vars` only (never `--set-env-vars`, which
 wipes the ingest secret), then check the board URL in LinkedIn's Post Inspector.

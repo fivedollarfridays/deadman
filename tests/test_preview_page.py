@@ -136,3 +136,34 @@ def test_a_configured_public_url_wins_over_the_request(monkeypatch: pytest.Monke
     environ = {"wsgi.url_scheme": "http", "HTTP_HOST": "attacker.example.test"}
 
     assert public_base_url(environ) == "https://deadman.example.test"
+
+
+@pytest.mark.parametrize(
+    "environ",
+    [
+        {"HTTP_HOST": "evil.example.test/<x>", "HTTP_X_FORWARDED_PROTO": "https"},
+        {"HTTP_HOST": "evil example", "HTTP_X_FORWARDED_PROTO": "https"},
+        {"HTTP_HOST": "", "HTTP_X_FORWARDED_PROTO": "https"},
+    ],
+)
+def test_a_malformed_host_header_is_not_echoed(
+    environ: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DEADMAN_PUBLIC_URL", raising=False)
+    environ = {"wsgi.url_scheme": "http", "SERVER_NAME": "board.internal", **environ}
+    environ["SERVER_PORT"] = "8080"
+
+    assert public_base_url(environ) == "https://board.internal:8080"
+
+
+def test_a_forwarded_proto_that_is_not_http_or_https_is_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEADMAN_PUBLIC_URL", raising=False)
+    environ = {
+        "wsgi.url_scheme": "http",
+        "HTTP_HOST": "board.example.test",
+        "HTTP_X_FORWARDED_PROTO": "javascript",
+    }
+
+    assert public_base_url(environ) == "http://board.example.test"

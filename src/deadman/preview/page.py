@@ -8,6 +8,7 @@ never reach the page as markup.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable, Iterable
 from html import escape
 
@@ -17,6 +18,15 @@ from deadman.preview.card import CARD_HEIGHT, CARD_PATH, CARD_WIDTH
 PUBLIC_URL_ENV = "DEADMAN_PUBLIC_URL"
 
 TITLE = "deadman"
+
+#: Sent with both representations of the board. The URL answers JSON or HTML
+#: depending on these two request headers, so a cache must key on them too.
+BOARD_VARY = (("Vary", "Accept, User-Agent"),)
+
+#: A bare host with an optional port: what ``Host`` is allowed to contribute
+#: to a URL this page publishes. Anything else falls back to the server name.
+_HOST = re.compile(r"[A-Za-z0-9.-]+(:[0-9]{1,5})?")
+_SCHEMES = ("http", "https")
 
 #: The README's opening line, verbatim: the preview claims nothing the
 #: project does not already say about itself.
@@ -36,19 +46,32 @@ _STYLE = (
 def public_base_url(environ: dict) -> str:
     """Scheme and host the page's absolute URLs are built on, no trailing slash.
 
-    ``DEADMAN_PUBLIC_URL`` wins when set. Otherwise the request says: Cloud
-    Run terminates TLS in front of the container, so the scheme is read from
-    ``X-Forwarded-Proto`` before the WSGI server's own (always ``http``).
+    ``DEADMAN_PUBLIC_URL`` wins when set, and the deploy sets it, so the
+    published URLs are configuration rather than whatever a request claimed.
+    Otherwise the request says: Cloud Run terminates TLS in front of the
+    container, so the scheme is read from ``X-Forwarded-Proto`` before the
+    WSGI server's own (always ``http``). Only ``http``/``https`` and a bare
+    ``host[:port]`` are accepted from headers; anything else is ignored.
     """
     configured = os.environ.get(PUBLIC_URL_ENV, "").strip()
     if configured:
         return configured.rstrip("/")
-    forwarded = str(environ.get("HTTP_X_FORWARDED_PROTO", "")).split(",")[0].strip()
-    scheme = forwarded or str(environ.get("wsgi.url_scheme", "http"))
-    host = environ.get("HTTP_HOST") or (
-        f"{environ.get('SERVER_NAME', 'localhost')}:{environ.get('SERVER_PORT', '80')}"
-    )
-    return f"{scheme}://{host}"
+    return f"{_scheme(environ)}://{_host(environ)}"
+
+
+def _scheme(environ: dict) -> str:
+    forwarded = str(environ.get("HTTP_X_FORWARDED_PROTO", "")).split(",")[0].strip().lower()
+    if forwarded in _SCHEMES:
+        return forwarded
+    own = str(environ.get("wsgi.url_scheme", "http")).lower()
+    return own if own in _SCHEMES else "http"
+
+
+def _host(environ: dict) -> str:
+    host = str(environ.get("HTTP_HOST", ""))
+    if _HOST.fullmatch(host):
+        return host
+    return f"{environ.get('SERVER_NAME', 'localhost')}:{environ.get('SERVER_PORT', '80')}"
 
 
 def render_page(board: dict[str, object], base_url: str) -> str:
@@ -90,7 +113,7 @@ def respond_page(
         [
             ("Content-Type", "text/html; charset=utf-8"),
             ("Content-Length", str(len(body))),
-            ("Vary", "Accept, User-Agent"),
+            *BOARD_VARY,
         ],
     )
     return [body]

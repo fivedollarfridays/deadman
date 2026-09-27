@@ -4,7 +4,10 @@ The JSON half is the load-bearing half. The ops board watcher reads ``GET /``
 with ``urllib`` and no ``Accept`` header; people read it with ``curl``. For
 each of those request shapes the body must equal the board serialised
 exactly as it was before the preview existed, and the headers must be the
-same two headers, in the same order, with nothing added.
+same two headers, in the same order, followed by exactly one addition:
+``Vary``. The URL now has two representations, and a cache that is not told
+so could hand an unfurler the JSON, or curl the page. ``Vary`` changes what a
+cache stores, never what a client reads.
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ def test_json_clients_get_exactly_the_board_they_always_got(headers: dict[str, s
     assert response_headers == [
         ("Content-Type", "application/json"),
         ("Content-Length", str(len(expected))),
+        ("Vary", "Accept, User-Agent"),
     ]
 
 
@@ -140,3 +144,14 @@ def test_head_of_the_card_sends_headers_and_no_body() -> None:
 def test_writing_to_the_card_path_is_refused() -> None:
     status, _, _ = _call(make_app(_probes), path=CARD_PATH, method="POST")
     assert status == "405 Method Not Allowed"
+
+
+def test_the_page_names_the_same_vary_as_the_json() -> None:
+    _, headers, _ = _call(make_app(_probes), HTTP_ACCEPT="text/html")
+    assert dict(headers)["Vary"] == "Accept, User-Agent"
+
+
+def test_only_the_board_varies_other_json_endpoints_are_untouched() -> None:
+    status, headers, _ = _call(make_app(_probes), path="/evidence", method="GET")
+    assert status == "405 Method Not Allowed"
+    assert [name for name, _ in headers] == ["Content-Type", "Content-Length"]

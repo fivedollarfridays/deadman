@@ -210,12 +210,10 @@ def _liveness_summary(liveness: LivenessReport | None) -> dict[str, object]:
     }
 
 
-def _respond(start_response: Callable, status: str, payload: object) -> Iterable[bytes]:
+def _respond(start_response: Callable, status: str, payload: object, extra=()) -> Iterable[bytes]:
     body = json.dumps(payload).encode("utf-8")
-    start_response(
-        status,
-        [("Content-Type", "application/json"), ("Content-Length", str(len(body)))],
-    )
+    headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+    start_response(status, [*headers, *extra])
     return [body]
 
 
@@ -290,7 +288,7 @@ def make_app(
         )
         if preview.wants_html(environ):
             return preview.respond_page(environ, start_response, board)
-        return _respond(start_response, "200 OK", board)
+        return _respond(start_response, "200 OK", board, preview.BOARD_VARY)
 
     return app
 
