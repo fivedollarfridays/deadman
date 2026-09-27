@@ -1,0 +1,10 @@
+id: plan-2026-09-dm3-9-redact-personal-details
+title: DM3.9 — redact personal details from public docs
+type: chore
+status: in_progress
+created_at: '2026-09-27T17:40:42.162659+00:00'
+skills:
+- planning-with-pm
+goals:
+- No personal email, phone, home path, or personal account name appears in tracked
+  files outside intentional placeholders

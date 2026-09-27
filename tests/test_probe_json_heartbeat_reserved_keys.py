@@ -65,7 +65,7 @@ def test_devpost_real_payload_reports_fault(tmp_path) -> None:
     _stale(
         tmp_path / "hb.json",
         row={"date": "2026-08-25", "count": 18},
-        source="/Users/kevinmasterson/prod/kai-studio/ops/data/devpost-series.json",
+        source="/Users/yourname/prod/kai-studio/ops/data/devpost-series.json",
     )
     evidence = _probe(tmp_path).observe()
     assert evidence.observation is Observation.FAULT

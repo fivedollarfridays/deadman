@@ -40,7 +40,7 @@ see whether the probe worked.
   "observation": "fault",
   "method": "local_artifact",
   "summary": "no brief sent in 176.7h (window 30h, ~7 missed)",
-  "source": "/Users/kevinmasterson/ops/data/brief-send-log.jsonl",
+  "source": "/Users/yourname/ops/data/brief-send-log.jsonl",
   "detail": {
     "last_send_at": "2026-08-04T11:56:45.586032+00:00",
     "age_hours": 176.71,

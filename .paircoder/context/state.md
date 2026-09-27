@@ -501,10 +501,10 @@ Google-signed tokens, which is a code change, so it stays DM3.
 revision `deadman-00010-t6g`, at https://deadman-mrapac5nda-uc.a.run.app.
 
 **Correction to the previous entry: `gcloud` was never missing.** It is at
-`/home/kmasty/google-cloud-sdk/bin/gcloud` on the rig, already authenticated as
-`kmasty1@gmail.com` against `deadman-20260810`. It is simply not on the PATH a
-non-interactive `ssh` gets, so `command -v gcloud` reported nothing. The earlier
-"gcloud is on neither machine" claim was wrong.
+`/home/yourname/google-cloud-sdk/bin/gcloud` on the rig, already authenticated
+as the owner's Google account against `deadman-20260810`. It is simply not on
+the PATH a non-interactive `ssh` gets, so `command -v gcloud` reported
+nothing. The earlier "gcloud is on neither machine" claim was wrong.
 
 **Deploying DM2 required three things that did not exist**, each of which would
 have crash-looped the service on its own:
