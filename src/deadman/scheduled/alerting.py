@@ -60,6 +60,9 @@ class Alarm(Protocol):
     def alert(self, key: str, state: str, message: str, *, now: datetime | None = None) -> None:
         """Deliver, throttled per ``(key, state)``."""
 
+    def recover(self, key: str, message: str, *, now: datetime | None = None) -> bool:
+        """Reset ``key``'s throttle after a heal; notify only if it had alerted."""
+
 
 def alarm_from_env(
     store: EvidenceStore,
@@ -108,36 +111,42 @@ def evaluate(
     ``no_evidence``) rather than its observation, so a throttled repeat and a
     state *change* are distinguished by what actually changed.
 
+    **A healthy row resets its surface's throttle** via ``channel.recover``,
+    which also sends one recovery notice if that surface had alarmed. Without
+    it the throttle never learns about a heal, and fault, heal, fault again
+    inside the window is suppressed as a repeat. A surface that alarmed on
+    any row this sweep is not recovered by another healthy row for it.
+
     A transport failure propagates after being recorded as evidence — the
     scheduled request then fails loudly and Cloud Scheduler's job status goes
     red, which is exactly the visibility a broken alarm deserves.
     """
-    fired = 0
+    fired: list[str] = []
+    healthy: list[Evidence] = []
 
-    if liveness is not None:
-        for row in liveness.rows:
-            if row.observation is Observation.HEALTHY:
-                continue
-            state = str(row.detail.get("liveness") or row.observation.value)
-            channel.alert(
-                row.surface,
-                state,
-                f"deadman: {row.surface} is {state} — {row.summary}",
-                now=now,
-            )
-            fired += 1
+    for row in liveness.rows if liveness is not None else ():
+        if row.observation is Observation.HEALTHY:
+            healthy.append(row)
+            continue
+        _fire(channel, row, str(row.detail.get("liveness") or row.observation.value), now)
+        fired.append(row.surface)
 
     for row in local_evidence:
         if _local_alertable(row):
-            channel.alert(
-                row.surface,
-                row.observation.value,
-                f"deadman: {row.surface} is {row.observation.value} — {row.summary}",
-                now=now,
-            )
-            fired += 1
+            _fire(channel, row, row.observation.value, now)
+            fired.append(row.surface)
+        elif row.observation is Observation.HEALTHY:
+            healthy.append(row)
 
-    return fired
+    for row in healthy:
+        if row.surface not in fired:
+            message = f"deadman: {row.surface} recovered — {row.summary}"
+            channel.recover(row.surface, message, now=now)
+    return len(fired)
+
+
+def _fire(channel: Alarm, row: Evidence, state: str, now: datetime | None) -> None:
+    channel.alert(row.surface, state, f"deadman: {row.surface} is {state} — {row.summary}", now=now)
 
 
 def _local_alertable(row: Evidence) -> bool:

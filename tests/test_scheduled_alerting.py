@@ -76,6 +76,10 @@ class _RecordingChannel:
     def alert(self, key: str, state: str, message: str, *, now=None) -> None:
         self.calls.append((key, state, message))
 
+    def recover(self, key: str, message: str, *, now=None) -> bool:
+        """Records nothing: a recovery is not an alert, and these tests count alerts."""
+        return False
+
 
 class TestWhatFires:
     def test_a_fault_surface_fires(self):

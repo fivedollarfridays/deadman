@@ -72,6 +72,16 @@ than no throttle at all — silence around the one moment silence is
 unaffordable. `tests/test_transports.py` pins this by flipping state
 mid-window and asserting every message still arrives.
 
+The production caller, `deadman.scheduled.alerting.evaluate`, only ever
+alerts on bad states, so it tells the throttle about a heal separately:
+`ThrottledAlertChannel.recover(key, message)` clears that key's window and
+sends one recovery notice, but only if the key had alerted (a surface that was
+never in trouble sends nothing, cold start or not). Without that call the
+throttle still held `fault` after a heal, and fault, heal, fault again inside
+the hour was suppressed as a repeat. `tests/test_alarm_refault_after_heal.py`
+pins this end to end through the scheduled endpoint on a fake clock, not on
+the throttle alone.
+
 ```python
 channel = ThrottledAlertChannel(channel=alert_channel)  # window defaults to 1h
 channel.alert("cron:morning-brief", "fault", "no brief sent in 36h")  # sends
@@ -79,6 +89,7 @@ channel.alert(
     "cron:morning-brief", "fault", "no brief sent in 42h"
 )  # suppressed — same state, inside the window
 channel.alert("cron:morning-brief", "healthy", "brief sent")  # sends — state changed
+channel.recover("cron:morning-brief", "brief recovered")  # resets the window
 ```
 
 ## A transport failure is evidence, not silence

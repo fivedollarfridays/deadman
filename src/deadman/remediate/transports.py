@@ -184,7 +184,9 @@ def record_transport_failures(
 class ThrottledAlertChannel:
     """Suppresses a repeat of the same state inside a window; a state change
     is delivered immediately regardless of how recently the last alert
-    fired.
+    fired. A caller that only ever alerts on bad states must call
+    :meth:`recover` when a key heals, or the next fault inside the window
+    reads as a repeat of the last one.
 
     ``key`` scopes the window per caller (e.g. per surface, or "self_check")
     so two unrelated alarms never share one throttle clock.
@@ -203,3 +205,18 @@ class ThrottledAlertChannel:
                 return
         self.channel.alert(message)
         self._last[key] = (state, moment)
+
+    def recover(self, key: str, message: str, *, now: datetime | None = None) -> bool:
+        """Tell the throttle ``key`` is healthy again. Returns whether a
+        recovery notice was sent.
+
+        Only a key that has alerted is reset and notified: the window is
+        cleared *before* the notice goes out, so a re-fault after a heal is a
+        state change even if the notice itself fails to send. A key that never
+        alerted is left alone and sends nothing, or every healthy surface
+        would mail on every cold start.
+        """
+        if self._last.pop(key, None) is None:
+            return False
+        self.channel.alert(message)
+        return True

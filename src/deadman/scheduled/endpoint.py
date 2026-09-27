@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from deadman.probes.base import Probe, blind_spots, sweep
@@ -50,6 +51,9 @@ class ScheduledSelfCheckEndpoint:
     capability gap warns loudly at boot rather than refusing to serve — but
     the response names the gap on every trigger so it cannot be quiet."""
     liveness_fn: Callable[[], LivenessReport | None] | None = None
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+    """The instant the alarm's throttle is judged at. Injected only by tests
+    that must cross a throttle window without sleeping."""
 
     def handle(self, environ: dict) -> tuple[str, dict[str, Any]]:
         """``(status, payload)`` for one request. Never raises for bad input."""
@@ -77,6 +81,6 @@ class ScheduledSelfCheckEndpoint:
             payload["alerting"] = "unconfigured"
         else:
             liveness = self.liveness_fn() if self.liveness_fn is not None else None
-            payload["alerts_evaluated"] = evaluate(liveness, evidence, self.alarm)
+            payload["alerts_evaluated"] = evaluate(liveness, evidence, self.alarm, now=self.clock())
             payload["alerting"] = "active"
         return _STATUS_OK, payload
