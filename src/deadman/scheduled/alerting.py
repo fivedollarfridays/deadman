@@ -14,11 +14,13 @@ reads the store, and it is already the thing whose own death is watched by
 ``self:sweep`` liveness — so the alarm inherits a cadence someone is
 watching, rather than growing a second clock nobody watches.
 
-**What fires:** every FAULT (collected or local), every surface gone stale,
+**What fires:** every FAULT (collected or local), every local blind spot
+except the named one, every surface gone stale,
 and every declared collector that is silent or has never reported. **What
-does not:** healthy rows, and the service's own permanently-blind local
-probes — the container has no brief log by design, and paging a human four
-times an hour about topology teaches them to delete the alarm.
+does not:** healthy rows, and the one local probe named in
+``_PERMANENTLY_BLIND_LOCAL`` — the container has no brief log by design, and
+paging a human four times an hour about topology teaches them to delete the
+alarm. Every *other* local blind spot alarms: only the named probe is exempt.
 
 **Known limit, stated:** the throttle window lives in instance memory, so a
 Cloud Run cold start forgets it and a persisting fault may re-alert early.
@@ -58,11 +60,15 @@ class Alarm(Protocol):
     def alert(self, key: str, state: str, message: str, *, now: datetime | None = None) -> None:
         """Deliver, throttled per ``(key, state)``."""
 
+    def recover(self, key: str, message: str, *, now: datetime | None = None) -> bool:
+        """Reset ``key``'s throttle after a heal; notify only if it had alerted."""
+
 
 def alarm_from_env(
     store: EvidenceStore,
     monitored: Sequence[str],
     environ: Mapping[str, str] | None = None,
+    monitored_transports: Mapping[str, str] | None = None,
 ) -> ThrottledAlertChannel:
     """The production alarm: env-configured SMTP, out-of-band checked,
     failures recorded to the store, repeats throttled.
@@ -70,6 +76,10 @@ def alarm_from_env(
     Raises :class:`AlarmUnconfigured` when the environment is missing rather
     than returning a channel that silently cannot send — the caller decides
     whether an unconfigured alarm is fatal, but it may never be invisible.
+
+    ``monitored_transports`` maps a monitored surface to the transport it
+    declares it depends on; the channel refuses (``AlertChannelInvalid``) when
+    the alarm's own SMTP account is one of them, whatever either is named.
     """
     source = os.environ if environ is None else environ
     try:
@@ -81,6 +91,8 @@ def alarm_from_env(
         transport=f"email:{transport.to_addr}",
         send=record_transport_failures(transport.send, store),
         monitored=list(monitored),
+        identity=transport.identity,
+        monitored_transports=dict(monitored_transports or {}),
     )
     return ThrottledAlertChannel(channel=channel)
 
@@ -106,36 +118,54 @@ def evaluate(
     ``no_evidence``) rather than its observation, so a throttled repeat and a
     state *change* are distinguished by what actually changed.
 
+    **A healthy row resets its surface's throttle** via ``channel.recover``,
+    which also sends one recovery notice if that surface had alarmed. Without
+    it the throttle never learns about a heal, and fault, heal, fault again
+    inside the window is suppressed as a repeat. A surface that alarmed on
+    any row this sweep is not recovered by another healthy row for it.
+
     A transport failure propagates after being recorded as evidence — the
     scheduled request then fails loudly and Cloud Scheduler's job status goes
     red, which is exactly the visibility a broken alarm deserves.
     """
-    fired = 0
+    fired: list[str] = []
+    healthy: list[Evidence] = []
 
-    if liveness is not None:
-        for row in liveness.rows:
-            if row.observation is Observation.HEALTHY:
-                continue
-            state = str(row.detail.get("liveness") or row.observation.value)
-            channel.alert(
-                row.surface,
-                state,
-                f"deadman: {row.surface} is {state} — {row.summary}",
-                now=now,
-            )
-            fired += 1
+    for row in liveness.rows if liveness is not None else ():
+        if row.observation is Observation.HEALTHY:
+            healthy.append(row)
+            continue
+        _fire(channel, row, str(row.detail.get("liveness") or row.observation.value), now)
+        fired.append(row.surface)
 
     for row in local_evidence:
-        if row.observation is Observation.FAULT:
-            channel.alert(
-                row.surface,
-                row.observation.value,
-                f"deadman: {row.surface} is {row.observation.value} — {row.summary}",
-                now=now,
-            )
-            fired += 1
+        if _local_alertable(row):
+            _fire(channel, row, row.observation.value, now)
+            fired.append(row.surface)
+        elif row.observation is Observation.HEALTHY:
+            healthy.append(row)
 
-    return fired
+    for row in healthy:
+        if row.surface not in fired:
+            message = f"deadman: {row.surface} recovered — {row.summary}"
+            channel.recover(row.surface, message, now=now)
+    return len(fired)
+
+
+def _fire(channel: Alarm, row: Evidence, state: str, now: datetime | None) -> None:
+    channel.alert(row.surface, state, f"deadman: {row.surface} is {state} — {row.summary}", now=now)
+
+
+def _local_alertable(row: Evidence) -> bool:
+    """A local FAULT always alarms; a local blind spot alarms unless its
+    surface is named in :data:`_PERMANENTLY_BLIND_LOCAL`. Only the named probe
+    is exempt: an unexpected blind spot is the instrument failing, and that is
+    exactly what this project exists to say out loud."""
+    if row.observation is Observation.FAULT:
+        return True
+    return (
+        row.observation is Observation.UNOBSERVABLE and row.surface not in _PERMANENTLY_BLIND_LOCAL
+    )
 
 
 def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
@@ -152,6 +182,12 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
     a watched rail dies here at startup, not at the moment it is needed. The
     service import is lazy for the same reason ``real_monitored_surfaces``'s
     is: this module must stay importable without the service's env.
+
+    **An alarm that is not out of band is not caught here.** Only
+    :class:`AlarmUnconfigured` degrades to ``None``; ``AlertChannelInvalid``
+    (a shared rail, or a shared transport declared in the collector
+    declaration's ``transports``) propagates, so the service refuses to boot
+    rather than running an alarm that dies with what it watches.
     """
     import sys
 
@@ -159,11 +195,13 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
 
     expectations = default_expectations()
     monitored = [probe.surface for probe in default_probes()]
+    transports: dict[str, str] = {}
     for expectation in expectations:
         monitored.append(collector_surface(expectation.collector_id))
         monitored.extend(expectation.surfaces)
+        transports.update(expectation.transports)
     try:
-        return alarm_from_env(store=store, monitored=monitored)
+        return alarm_from_env(store=store, monitored=monitored, monitored_transports=transports)
     except AlarmUnconfigured as exc:
         print(
             f"deadman: the alarm is UNCONFIGURED, so faults will be recorded and "

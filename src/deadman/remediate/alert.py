@@ -18,12 +18,20 @@ monitored surface exactly *and* when it merely shares that surface's rail. If
 ``sms:relay`` is monitored, then ``sms:backup-number`` is not out of band: it
 is the same physical path with a different destination, and it fails for the
 same reason at the same moment.
+
+**Transports, not just spellings.** A rail prefix is only as good as the name
+somebody typed: the morning brief is ``cron:morning-brief`` and the alarm is
+``email:...``, yet both go out through one SMTP account, and one expired
+credential kills both. So the channel also carries its real ``identity``
+(:func:`transport_identity`, e.g. ``smtp:<host>/<account>``), each monitored
+surface may declare the transport it depends on, and the channel is refused
+when the two are the same transport whatever either is called.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 
 
 class AlertChannelInvalid(ValueError):
@@ -40,6 +48,19 @@ def _rail(surface: str) -> str:
     return surface.split(":", 1)[0].strip().lower()
 
 
+def transport_identity(kind: str, host: str, account: str) -> str:
+    """The comparable identity of a real transport: ``kind:host/account``,
+    trimmed and lower-cased so a difference in spelling is not a difference
+    in transport."""
+    return f"{kind}:{host}/{account}".strip().lower()
+
+
+def same_transport(declared: str, identity: str) -> bool:
+    """Whether a declared transport is ``identity``, compared the way
+    :func:`transport_identity` normalises."""
+    return declared.strip().lower() == identity.strip().lower()
+
+
 @dataclass(frozen=True)
 class AlertChannel:
     """A way to raise an alarm that does not depend on a watched surface."""
@@ -51,6 +72,11 @@ class AlertChannel:
 
     send: Callable[[str], None]
     monitored: Sequence[str]
+    identity: str = ""
+    """The real transport the alarm sends over (:func:`transport_identity`).
+    Empty only for callers with no real transport (the demo, tests)."""
+    monitored_transports: Mapping[str, str] = field(default_factory=dict)
+    """Monitored surface -> the transport it declares it depends on."""
 
     def __post_init__(self) -> None:
         rail = _rail(self.transport)
@@ -62,6 +88,21 @@ class AlertChannel:
                     f"that surface fails, the alarm fails with it and the "
                     f"outage becomes self-concealing. Choose a transport on a "
                     f"rail deadman does not watch."
+                )
+        self._refuse_shared_transport()
+
+    def _refuse_shared_transport(self) -> None:
+        if not self.identity.strip():
+            return
+        for surface, declared in self.monitored_transports.items():
+            if same_transport(declared, self.identity):
+                raise AlertChannelInvalid(
+                    f"alert transport {self.transport!r} is not out of band: it "
+                    f"sends over the same transport the monitored surface "
+                    f"{surface!r} declares it depends on. One failure of that "
+                    f"transport (an expired credential, a locked account) "
+                    f"silences the surface and its alarm together. Send the "
+                    f"alarm over a transport no monitored surface uses."
                 )
 
     def alert(self, message: str) -> None:

@@ -18,12 +18,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from deadman.probes.base import Probe, blind_spots, sweep
 from deadman.scheduled.alerting import Alarm, evaluate
 from deadman.scheduled.auth import AUTHORIZATION_ENVIRON_KEY, SchedulerAuthError, check_secret
-from deadman.self_check import DEFAULT_WINDOW_HOURS, StoreSelfEvidenceLog, self_check
+from deadman.scheduled.freshness import WINDOW_HOURS
+from deadman.self_check import StoreSelfEvidenceLog, self_check
 from deadman.verify.collector_liveness import LivenessReport
 
 #: The path Cloud Scheduler posts to.
@@ -43,13 +45,16 @@ class ScheduledSelfCheckEndpoint:
     probes_fn: ProbesFn
     self_log: StoreSelfEvidenceLog
     secret: str
-    window_hours: float = DEFAULT_WINDOW_HOURS
+    window_hours: float = WINDOW_HOURS
     alarm: Alarm | None = None
     """The throttled alert channel, or ``None`` when ``DEADMAN_ALERT_*`` is
     unconfigured. Optional follows the ``DEADMAN_COLLECTORS`` precedent — a
     capability gap warns loudly at boot rather than refusing to serve — but
     the response names the gap on every trigger so it cannot be quiet."""
     liveness_fn: Callable[[], LivenessReport | None] | None = None
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+    """The instant the alarm's throttle is judged at. Injected only by tests
+    that must cross a throttle window without sleeping."""
 
     def handle(self, environ: dict) -> tuple[str, dict[str, Any]]:
         """``(status, payload)`` for one request. Never raises for bad input."""
@@ -77,6 +82,6 @@ class ScheduledSelfCheckEndpoint:
             payload["alerting"] = "unconfigured"
         else:
             liveness = self.liveness_fn() if self.liveness_fn is not None else None
-            payload["alerts_evaluated"] = evaluate(liveness, evidence, self.alarm)
+            payload["alerts_evaluated"] = evaluate(liveness, evidence, self.alarm, now=self.clock())
             payload["alerting"] = "active"
         return _STATUS_OK, payload

@@ -115,7 +115,11 @@ class TestHistoryReadIsBounded:
 
         build_board([_FakeProbe(evidence)], store=store)
 
-        assert calls == [DEFAULT_HISTORY_LIMIT]
+        # One held-duration read for the one surface, at the cap. The board's
+        # ``self_check`` field adds one more read (the newest ``self:sweep``
+        # row), and it too must be bounded.
+        assert calls.count(DEFAULT_HISTORY_LIMIT) == 1
+        assert all(0 < limit <= DEFAULT_HISTORY_LIMIT for limit in calls)
 
 
 class TestReportedByOnTheBoard:

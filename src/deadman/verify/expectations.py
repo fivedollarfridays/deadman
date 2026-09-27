@@ -69,6 +69,11 @@ class CollectorExpectation:
 
     grace_intervals: float = DEFAULT_GRACE_INTERVALS
 
+    transports: tuple[tuple[str, str], ...] = ()
+    """``(surface, transport)`` pairs: the real transport a surface depends
+    on (``smtp:<host>/<account>``), so the alarm can refuse to share it.
+    Optional; see :mod:`deadman.remediate.alert`."""
+
     @property
     def silence_after_seconds(self) -> float:
         """How long a gap may be before it is a fault rather than lateness."""
@@ -119,6 +124,7 @@ def _parse_one(index: int, entry: Any) -> CollectorExpectation:
         interval_seconds=_interval(index, entry),
         surfaces=_surfaces(index, entry),
         grace_intervals=_grace(index, entry),
+        transports=_transports(index, entry),
     )
 
 
@@ -158,6 +164,25 @@ def _surfaces(index: int, entry: Mapping[str, Any]) -> tuple[str, ...]:
                 f"config key 'collectors[{index}].surfaces[{position}]' must be a non-empty string"
             )
     return tuple(value)
+
+
+def _transports(index: int, entry: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Optional ``{surface: transport}``. Every key must be one of this
+    collector's surfaces: a transport declared for a surface nobody reports
+    is a typo that would quietly exempt the real one from the check."""
+    value = entry.get("transports", {})
+    key = f"collectors[{index}].transports"
+    if not isinstance(value, Mapping):
+        raise ExpectationError(f"config key '{key}' must be an object of surface -> transport")
+    surfaces = set(_surfaces(index, entry))
+    for surface, transport in value.items():
+        if surface not in surfaces:
+            raise ExpectationError(
+                f"config key '{key}' names {surface!r}, which this collector does not report"
+            )
+        if not isinstance(transport, str) or not transport.strip():
+            raise ExpectationError(f"config key '{key}.{surface}' must be a non-empty string")
+    return tuple(value.items())
 
 
 def _refuse_ambiguous_ownership(expectations: tuple[CollectorExpectation, ...]) -> None:

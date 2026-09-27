@@ -113,12 +113,16 @@ decision most worth 20 seconds.
 
 **4 · The watcher is itself watched, on a second clock. (~25s)** Cloud Console
 on the Cloud Scheduler job `deadman-self-check`, `*/15 * * * *`. Then back to
-the board: `undeclared_surfaces` contains `self:sweep`, which is the service's
-own liveness row sitting in Firestore — written by a scheduled sweep, read back
-by a different instance, surviving the cold start that killed the DM1 version.
+the board: the `self_check` field reads `live`, with `last_run_at` and
+`age_seconds` taken from the service's own liveness row (`self:sweep`) in
+Firestore — written by a scheduled sweep, read back by a different instance,
+surviving the cold start that killed the DM1 version.
 
 Say why there are two clocks: launchd on the Mac and Cloud Scheduler in GCP,
-deliberately unrelated, so one dying is visible in the other's evidence.
+deliberately unrelated. The scheduled sweep alarms on a silent Mac collector;
+the service cannot alarm on its own scheduler, so the board publishes the
+self-check's age for a watcher on the Mac's clock to alarm on (see
+`infra/scheduler.md`, "Who watches the scheduler").
 
 **5 · The alarm. (~15s)** Show the delivered mail in the inbox. It went out
 over email — a rail deadman does not watch — and `AlertChannel` refuses at

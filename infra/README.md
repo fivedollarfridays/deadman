@@ -252,6 +252,23 @@ see "Real surfaces" in `docs/surfaces.md`) — a full volume on one machine says
 nothing about the other, and a shared id would let one machine's healthy
 report paper over the other's fault.
 
+An entry may also carry `transports`, an optional object naming the real
+transport a surface depends on, so the alarm can refuse to share it:
+
+```json
+"transports": {"cron:morning-brief": "smtp:<host>/<account>"}
+```
+
+The value is `smtp:<host>/<account>`, compared trimmed and lower-cased. At
+startup the alarm's own identity, built from `DEADMAN_ALERT_SMTP_HOST` and
+`DEADMAN_ALERT_SMTP_USER`, is compared with every declared transport, and a
+match refuses to boot with `AlertChannelInvalid` (see `docs/alerting.md`).
+**The declaration names the account in plain text**, and the committed
+`collectors.json` is public: declaring a real account there publishes its
+login name (not its password). Hashing would not hide it, because an account
+name is guessable offline; whether to publish it is the owner's call.
+A key naming a surface the collector does not report is a startup error.
+
 `collector_id` must match what the collector signs its batches with, and
 `interval_seconds` must match its `StartInterval` in the launchd plist (900
 in both, today). `grace_intervals` defaults to `1.0`, so silence becomes a

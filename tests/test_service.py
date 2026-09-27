@@ -140,6 +140,14 @@ class TestBuildBoard:
             "stale_count": 0,
             "unreported_count": 0,
             "undeclared_surfaces": [],
+            "self_check": {
+                "surface": "self:sweep",
+                "liveness": "no_evidence",
+                "last_run_at": None,
+                "age_seconds": None,
+                "window_seconds": 2700,
+                "interval_seconds": 900,
+            },
         }
 
     def test_evidence_rows_are_json_serializable(self):

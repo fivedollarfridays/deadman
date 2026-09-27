@@ -57,6 +57,31 @@ can go stale the moment a new probe ships, silently letting a future
 monitored rail double as the alarm. Reading it from the live probe objects
 means the check can never fall behind what is actually watched.
 
+### Rails are spelled; transports are real
+
+A rail prefix is only as good as the name somebody typed. The morning brief's
+surface id is `cron:morning-brief`, and it is sent by ops over an SMTP account;
+the alarm is `email:...`, and this document tells you to point it at the same
+account. `cron` versus `email` passes the prefix check, and one expired
+credential then kills the brief and its alarm together, which is the outage
+in `PROOF.md` one layer down.
+
+So the channel also compares real transports. `EmailTransport.identity` is
+`smtp:<host>/<account>`, built from the SMTP host and login it actually sends
+with. A monitored surface declares the transport it depends on in the
+collector declaration's optional `transports` object (see `infra/README.md`,
+including why a declared account is published in plain text). `AlertChannel` raises `AlertChannelInvalid`
+at construction when its identity matches any declared transport, whatever
+either is named, and `default_alarm` lets that propagate: the service refuses
+to boot, as documented above, instead of degrading to "unconfigured".
+
+**The check is only as complete as the declaration.** A surface whose
+transport is not declared cannot be compared, so the committed
+`infra/collector/collectors.json` declares none today and the live alarm is
+not refused by it. Declaring the morning brief's real account is the owner's
+decision, and if the alarm shares that account, the deploy will refuse
+to start until the alarm moves to a different one.
+
 ## The throttle: a documented window, and one absolute exception
 
 A persistent fault sweeps on every cadence — the morning brief will still be
@@ -72,6 +97,16 @@ than no throttle at all — silence around the one moment silence is
 unaffordable. `tests/test_transports.py` pins this by flipping state
 mid-window and asserting every message still arrives.
 
+The production caller, `deadman.scheduled.alerting.evaluate`, only ever
+alerts on bad states, so it tells the throttle about a heal separately:
+`ThrottledAlertChannel.recover(key, message)` clears that key's window and
+sends one recovery notice, but only if the key had alerted (a surface that was
+never in trouble sends nothing, cold start or not). Without that call the
+throttle still held `fault` after a heal, and fault, heal, fault again inside
+the hour was suppressed as a repeat. `tests/test_alarm_refault_after_heal.py`
+pins this end to end through the scheduled endpoint on a fake clock, not on
+the throttle alone.
+
 ```python
 channel = ThrottledAlertChannel(channel=alert_channel)  # window defaults to 1h
 channel.alert("cron:morning-brief", "fault", "no brief sent in 36h")  # sends
@@ -79,6 +114,7 @@ channel.alert(
     "cron:morning-brief", "fault", "no brief sent in 42h"
 )  # suppressed — same state, inside the window
 channel.alert("cron:morning-brief", "healthy", "brief sent")  # sends — state changed
+channel.recover("cron:morning-brief", "brief recovered")  # resets the window
 ```
 
 ## A transport failure is evidence, not silence
