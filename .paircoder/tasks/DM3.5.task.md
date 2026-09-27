@@ -6,11 +6,14 @@ plan: plan-2026-09-dm3-5-audit-four-faults
 type: bugfix
 priority: P0
 complexity: 5
-status: pending
+status: in_progress
 sprint: null
 tags: []
 depends_on: []
 complexity_scale: points
+runtime:
+  pre_task_sha:
+    deadman-faults: fecdae6b7903342df2865698ce83c8cad019f0b9
 ---
 
 # Objective
@@ -36,10 +39,10 @@ for a 15-minute job.
 
 # Acceptance Criteria
 
-- [ ] `GET /` carries a `self_check` object with `liveness`, `last_run_at`, `age_seconds`, `window_seconds`, `interval_seconds`
-- [ ] The scheduled self-check's staleness window is three scheduler intervals, not 30 hours
-- [ ] Every pre-existing board field is unchanged (DM1 contract tests green)
-- [ ] infra/scheduler.md no longer claims `self:sweep` staleness is visible by itself; the watcher contract is documented
+- [x] `GET /` carries a `self_check` object with `liveness`, `last_run_at`, `age_seconds`, `window_seconds`, `interval_seconds`
+- [x] The scheduled self-check's staleness window is three scheduler intervals, not 30 hours
+- [x] Every pre-existing board field is unchanged (DM1 contract tests green)
+- [x] infra/scheduler.md no longer claims `self:sweep` staleness is visible by itself; the watcher contract is documented
 
 # Verification
 

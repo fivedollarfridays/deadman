@@ -28,9 +28,9 @@ alarm; every other local blind spot alarms. Audit finding D4.
 
 # Acceptance Criteria
 
-- [ ] A blind local probe not named in `_PERMANENTLY_BLIND_LOCAL` alarms
-- [ ] The named probe does not
-- [ ] `_PERMANENTLY_BLIND_LOCAL` is the thing that decides
+- [x] A blind local probe not named in `_PERMANENTLY_BLIND_LOCAL` alarms
+- [x] The named probe does not
+- [x] `_PERMANENTLY_BLIND_LOCAL` is the thing that decides
 
 # Verification
 

@@ -5,11 +5,14 @@ plan: plan-2026-09-dm3-5-audit-four-faults
 type: bugfix
 priority: P0
 complexity: 3
-status: pending
+status: in_progress
 sprint: null
 tags: []
 depends_on: []
 complexity_scale: points
+runtime:
+  pre_task_sha:
+    deadman-faults: dbfbea036ef0da89f4d9044289a2a188b57b76d8
 ---
 
 # Objective
@@ -29,10 +32,10 @@ surface-id prefix. Audit finding D3.
 
 # Acceptance Criteria
 
-- [ ] An alarm on the same SMTP account as a declared monitored surface raises `AlertChannelInvalid` at construction, whatever either is named
-- [ ] A different account on the same labels constructs
-- [ ] `default_alarm` lets the refusal propagate
-- [ ] Production config is not changed; whether it passes is reported
+- [x] An alarm on the same SMTP account as a declared monitored surface raises `AlertChannelInvalid` at construction, whatever either is named
+- [x] A different account on the same labels constructs
+- [x] `default_alarm` lets the refusal propagate
+- [x] Production config is not changed; whether it passes is reported
 
 # Verification
 

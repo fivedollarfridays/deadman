@@ -5,11 +5,14 @@ plan: plan-2026-09-dm3-5-audit-four-faults
 type: bugfix
 priority: P0
 complexity: 3
-status: pending
+status: in_progress
 sprint: null
 tags: []
 depends_on: []
 complexity_scale: points
+runtime:
+  pre_task_sha:
+    deadman-faults: bba8723b8e332c07596957a076d928903573e449
 ---
 
 # Objective
@@ -33,9 +36,9 @@ for callers that send healthy; the production caller does not.
 
 # Acceptance Criteria
 
-- [ ] A re-fault after a heal inside the throttle window is delivered
-- [ ] A heal after an alerted fault sends one recovery notice; a healthy surface that never alerted sends nothing
-- [ ] A persisting fault inside the window is still throttled
+- [x] A re-fault after a heal inside the throttle window is delivered
+- [x] A heal after an alerted fault sends one recovery notice; a healthy surface that never alerted sends nothing
+- [x] A persisting fault inside the window is still throttled
 
 # Verification
 
