@@ -6,7 +6,7 @@ plan: plan-2026-09-dm3-9-redact-personal-details
 type: chore
 priority: P1
 complexity: 3
-status: in_progress
+status: done
 sprint: null
 tags: []
 depends_on: []
@@ -14,6 +14,8 @@ complexity_scale: points
 runtime:
   pre_task_sha:
     deadman-redact: 86780a45623e8e89a469622138d4101a6707081d
+  conflicts_encountered: none
+completed_at: '2026-09-27T17:44:56.529575+00:00'
 ---
 
 # Objective

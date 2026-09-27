@@ -1,6 +1,6 @@
 # Current State
 
-> Last updated: 2026-09-27 17:01 UTC
+> Last updated: 2026-09-27 17:44 UTC
 
 <!-- paircoder:state:begin -->
 ## Active Plan
@@ -144,6 +144,8 @@ destination read); fixing `morning_brief_send.py`, which is an `ops` repo bug
 existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
+
+- **DM3.9 done** (auto-updated by hook)
 
 - **DM3.7 done** (auto-updated by hook)
 
@@ -2136,3 +2138,24 @@ should alarm) and the wiring flag on `real_monitored_surfaces` (unwired on main 
 cannot be read or parsed, instead of failing `GET /`. Declined, with reasons in the PR: the ops-side half of D1
 and declaring a real transport in the committed config (both outside this PR by its contract), caching the
 one-row read, and the `recover` protocol widening (every implementer checked). 749 passed.
+
+## 2026-09-27 — DM3.9 DONE ✓: personal data redacted from public docs and fixtures
+
+**Task:** `docs/alerting.md` published the owner's personal Gmail address as the `DEADMAN_ALERT_TO` example
+value, and carried a stale "blocked, not done" verification section describing an old sibling-repo dummy-SMTP
+setup and a personal work email — stale because that AC actually closed via DM2.7's real send test and the
+doc was never updated. Rewrote the section to state the current, confirmed-working status without naming any
+account, and replaced both email addresses with `you@example.com`.
+
+**Repo-wide grep** for personal emails (excluding placeholders/noreply), phone numbers, and `/Users/<name>` /
+`/home/<name>` paths found the owner's real account name in `.paircoder/context/state.md`, two `.paircoder`
+task files, `docs/PROOF.md`, `infra/collector/collector.example.json`, a test fixture, and two test files.
+All replaced with `yourname` / `you@example.com` placeholders; the two `test_security_hardening.py` assertions
+that checked for the literal name were updated to check for the new placeholder instead, so the redaction
+behavior under test (`public_source`/`_evidence_row` stripping path-shaped values) is still exercised
+correctly. No phone numbers were found. `kevin-mac`/`kevin-rig` collector ids and prose mentions of "Kevin"
+were left alone — device nicknames and a first name are not email addresses, phone numbers, home paths, or
+account names, and rewriting them would be a much larger, unrequested change.
+
+**Proven:** 749 passed, ruff check and format clean; `arch check`/`check-wiring`/`check-provenance` findings
+on `src/deadman` are unchanged from `main` (no `src/` files were touched by this task). Not merged.
