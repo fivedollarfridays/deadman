@@ -68,6 +68,7 @@ def alarm_from_env(
     store: EvidenceStore,
     monitored: Sequence[str],
     environ: Mapping[str, str] | None = None,
+    monitored_transports: Mapping[str, str] | None = None,
 ) -> ThrottledAlertChannel:
     """The production alarm: env-configured SMTP, out-of-band checked,
     failures recorded to the store, repeats throttled.
@@ -75,6 +76,10 @@ def alarm_from_env(
     Raises :class:`AlarmUnconfigured` when the environment is missing rather
     than returning a channel that silently cannot send — the caller decides
     whether an unconfigured alarm is fatal, but it may never be invisible.
+
+    ``monitored_transports`` maps a monitored surface to the transport it
+    declares it depends on; the channel refuses (``AlertChannelInvalid``) when
+    the alarm's own SMTP account is one of them, whatever either is named.
     """
     source = os.environ if environ is None else environ
     try:
@@ -86,6 +91,8 @@ def alarm_from_env(
         transport=f"email:{transport.to_addr}",
         send=record_transport_failures(transport.send, store),
         monitored=list(monitored),
+        identity=transport.identity,
+        monitored_transports=dict(monitored_transports or {}),
     )
     return ThrottledAlertChannel(channel=channel)
 
@@ -175,6 +182,12 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
     a watched rail dies here at startup, not at the moment it is needed. The
     service import is lazy for the same reason ``real_monitored_surfaces``'s
     is: this module must stay importable without the service's env.
+
+    **An alarm that is not out of band is not caught here.** Only
+    :class:`AlarmUnconfigured` degrades to ``None``; ``AlertChannelInvalid``
+    (a shared rail, or a shared transport declared in the collector
+    declaration's ``transports``) propagates, so the service refuses to boot
+    rather than running an alarm that dies with what it watches.
     """
     import sys
 
@@ -182,11 +195,13 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
 
     expectations = default_expectations()
     monitored = [probe.surface for probe in default_probes()]
+    transports: dict[str, str] = {}
     for expectation in expectations:
         monitored.append(collector_surface(expectation.collector_id))
         monitored.extend(expectation.surfaces)
+        transports.update(expectation.transports)
     try:
-        return alarm_from_env(store=store, monitored=monitored)
+        return alarm_from_env(store=store, monitored=monitored, monitored_transports=transports)
     except AlarmUnconfigured as exc:
         print(
             f"deadman: the alarm is UNCONFIGURED, so faults will be recorded and "

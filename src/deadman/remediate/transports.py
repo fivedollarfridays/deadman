@@ -43,7 +43,7 @@ from email.message import EmailMessage
 from typing import Any
 
 from deadman.evidence.model import Evidence, Method, Observation
-from deadman.remediate.alert import AlertChannel
+from deadman.remediate.alert import AlertChannel, transport_identity
 from deadman.store.base import EvidenceStore
 
 #: One line, no config: the alert body is the whole message and nothing in
@@ -92,6 +92,12 @@ class EmailTransport:
     ``None`` in real use, where :class:`smtplib.SMTP` is constructed
     directly — the same seam :class:`~deadman.store.firestore.FirestoreEvidenceStore`
     uses for its client."""
+
+    @property
+    def identity(self) -> str:
+        """The account this transport really sends through, in the form
+        :class:`~deadman.remediate.alert.AlertChannel` compares."""
+        return transport_identity("smtp", self.host, self.username)
 
     def send(self, message: str) -> None:
         """Send. Raises on any transport failure; never swallows one."""

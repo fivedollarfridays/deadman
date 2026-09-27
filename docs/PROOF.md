@@ -104,8 +104,11 @@ would have been actively answering the question, wrongly.
 
 **Which is why the alarm may not travel over a monitored rail.**
 `deadman.remediate.alert.AlertChannel` refuses at construction — not at send
-time — to sit on any surface deadman watches. Configuring the alarm on the
-morning brief raises immediately. That rule is this outage written down.
+time — to sit on any surface deadman watches. It compares rail prefixes and,
+since DM3.7, the real SMTP account: an alarm sending over the account a
+monitored surface declares it depends on (the collector declaration's
+`transports`, see `docs/alerting.md`) raises immediately, whatever either is
+named. That rule is this outage written down.
 
 ## What the board says now
 

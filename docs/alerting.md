@@ -57,6 +57,32 @@ can go stale the moment a new probe ships, silently letting a future
 monitored rail double as the alarm. Reading it from the live probe objects
 means the check can never fall behind what is actually watched.
 
+### Rails are spelled; transports are real
+
+A rail prefix is only as good as the name somebody typed. The morning brief's
+surface id is `cron:morning-brief`, and it is sent by ops over an SMTP account;
+the alarm is `email:...`, and this document tells you to point it at the same
+account. `cron` versus `email` passes the prefix check, and one expired
+credential then kills the brief and its alarm together, which is the outage
+in `PROOF.md` one layer down.
+
+So the channel also compares real transports. `EmailTransport.identity` is
+`smtp:<host>/<account>`, built from the SMTP host and login it actually sends
+with. A monitored surface declares the transport it depends on in the
+collector declaration's optional `transports` object (see `infra/README.md`;
+a value may be the identity or `sha256:<hex>` of it, so a public config does
+not have to publish an account). `AlertChannel` raises `AlertChannelInvalid`
+at construction when its identity matches any declared transport, whatever
+either is named, and `default_alarm` lets that propagate: the service refuses
+to boot, as documented above, instead of degrading to "unconfigured".
+
+**The check is only as complete as the declaration.** A surface whose
+transport is not declared cannot be compared, so the committed
+`infra/collector/collectors.json` declares none today and the live alarm is
+not refused by it. Declaring the morning brief's real account (hashed) is the
+owner's decision, and if the alarm shares that account, the deploy will refuse
+to start until the alarm moves to a different one.
+
 ## The throttle: a documented window, and one absolute exception
 
 A persistent fault sweeps on every cadence — the morning brief will still be
