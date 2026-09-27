@@ -145,6 +145,8 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+- **DM3.7 done** (auto-updated by hook)
+
 - **DM3.6 done** (auto-updated by hook)
 
 - **DM3.5-DM3.8 done**: the four dangerous faults from the 2026-09-27 audit (see the 2026-09-27 entry at the end)

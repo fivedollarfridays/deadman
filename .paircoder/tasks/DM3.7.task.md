@@ -5,7 +5,7 @@ plan: plan-2026-09-dm3-5-audit-four-faults
 type: bugfix
 priority: P0
 complexity: 3
-status: in_progress
+status: done
 sprint: null
 tags: []
 depends_on: []
@@ -13,6 +13,8 @@ complexity_scale: points
 runtime:
   pre_task_sha:
     deadman-faults: dbfbea036ef0da89f4d9044289a2a188b57b76d8
+  conflicts_encountered: none
+completed_at: '2026-09-27T17:01:18.693436+00:00'
 ---
 
 # Objective
