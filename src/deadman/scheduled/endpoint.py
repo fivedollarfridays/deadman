@@ -24,7 +24,8 @@ from typing import Any
 from deadman.probes.base import Probe, blind_spots, sweep
 from deadman.scheduled.alerting import Alarm, evaluate
 from deadman.scheduled.auth import AUTHORIZATION_ENVIRON_KEY, SchedulerAuthError, check_secret
-from deadman.self_check import DEFAULT_WINDOW_HOURS, StoreSelfEvidenceLog, self_check
+from deadman.scheduled.freshness import WINDOW_HOURS
+from deadman.self_check import StoreSelfEvidenceLog, self_check
 from deadman.verify.collector_liveness import LivenessReport
 
 #: The path Cloud Scheduler posts to.
@@ -44,7 +45,7 @@ class ScheduledSelfCheckEndpoint:
     probes_fn: ProbesFn
     self_log: StoreSelfEvidenceLog
     secret: str
-    window_hours: float = DEFAULT_WINDOW_HOURS
+    window_hours: float = WINDOW_HOURS
     alarm: Alarm | None = None
     """The throttled alert channel, or ``None`` when ``DEADMAN_ALERT_*`` is
     unconfigured. Optional follows the ``DEADMAN_COLLECTORS`` precedent — a

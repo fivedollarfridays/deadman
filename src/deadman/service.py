@@ -180,6 +180,7 @@ def build_board(
         "fault_count": sum(1 for e in rows if e.observation is Observation.FAULT),
         "blind_count": len(blind),
         **_liveness_summary(liveness),
+        "self_check": scheduled_pkg.freshness.board_field(store),
     }
 
 

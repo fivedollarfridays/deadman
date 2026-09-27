@@ -87,10 +87,13 @@ gcloud scheduler jobs create http deadman-self-check \
 
 `*/15 * * * *` — every 15 minutes — matches the collector's own `launchd`
 cadence (`infra/launchd/com.deadman.collector.plist`'s `StartInterval=900`)
-only because that is a sane default for a monitor with a 30-hour staleness
-window (`DEFAULT_WINDOW_HOURS` in `src/deadman/self_check.py`), not because
-the two schedulers need to agree — see "Two independent clocks" below for why
-they deliberately do not.
+by choice, not because the two schedulers need to agree — see "Two
+independent clocks" below for why they deliberately do not. The service
+declares this cadence as `SCHEDULER_INTERVAL_SECONDS` and judges the
+self-check stale after three intervals (`WINDOW_SECONDS`, 45 minutes), both in
+`src/deadman/scheduled/freshness.py`. **Change the schedule here and that
+constant together.** (The window used to be the daily CLI's 30 hours, which
+read a scheduler dead for a day as live.)
 
 ## 3. Verify the job actually fires
 
@@ -107,8 +110,13 @@ Trigger one run by hand rather than waiting for the cadence:
 gcloud scheduler jobs run deadman-self-check --location=us-central1
 ```
 
-Then read the row back through the store — not through the job, and not
-through `GET /`, which does not surface this surface:
+Then read the row back through the store — not by choice, not because the two schedulers need to agree — see "Two
+independent clocks" below for why they deliberately do not. The service
+declares this cadence as `SCHEDULER_INTERVAL_SECONDS` and judges the
+self-check stale after three intervals (`WINDOW_SECONDS`, 45 minutes), both in
+`src/deadman/scheduled/freshness.py`. **Change the schedule here and that
+constant together.** (The window used to be the daily CLI's 30 hours, which
+read a scheduler dead for a day as live.)
 
 ```bash
 python3 -c "
@@ -152,12 +160,50 @@ collector's process crashed) would silence *both* the collector's delivery
 and deadman's own liveness proof at once, which is precisely the
 self-concealing failure this whole project exists to catch: the same clock
 dying takes down the thing being monitored and the alarm that would have
-reported it. Two clocks means one dying is visible on the other's evidence —
-the collector going silent shows up as a stale `collector:*` surface
-(`src/deadman/verify/collector_liveness.py`); the scheduled self-check going
-silent shows up as `self:sweep` reading `STALE` or `NO_EVIDENCE`
-(`deadman.self_check.self_check`) — and neither report depends on the clock
-that produced the other one.
+reported it. The collector going silent shows up as a stale `collector:*`
+surface (`src/deadman/verify/collector_liveness.py`), judged and alarmed by
+the scheduled sweep, so the Mac's clock is watched from GCP's.
+
+The reverse is **not** true inside this service, and this document used to
+claim it was. Every alarm runs inside `POST /self-check`, which only this
+Cloud Scheduler job calls; if the job stops, is paused, or its bearer secret
+breaks, the code that would notice is the code that stopped running. Nothing
+in the service can alarm on its own scheduler. That is what the next section
+is for.
+
+## Who watches the scheduler
+
+An independent reader, on a clock this service does not own. The board
+publishes the scheduled self-check's age as an additive `self_check` object on
+`GET /` (no existing field changed), built by
+`src/deadman/scheduled/freshness.py` from the newest `self:sweep` row in the
+store:
+
+```json
+"self_check": {
+  "surface": "self:sweep",
+  "liveness": "live",
+  "last_run_at": "2026-09-27T18:45:02.114000+00:00",
+  "age_seconds": 412.7,
+  "window_seconds": 2700,
+  "interval_seconds": 900
+}
+```
+
+**The contract a watcher relies on:** the key is always present on the JSON
+board; `liveness` is `live` only when a scheduled sweep completed within
+`window_seconds` (three scheduler intervals); `stale` means the last one is
+older than that; `no_evidence` means none was ever recorded or the store
+could not be read, and `last_run_at` and `age_seconds` are then `null`. A
+watcher must treat a missing key, a `null` age, or any `liveness` other than
+`live` as the alarm path being dead, not as "nothing to report".
+`tests/test_board_self_check_age.py` pins this shape through `GET /`.
+
+The watcher that reads it is the ops repository's board watcher, run every 15
+minutes by the Mac's scheduler and judged by the ops freshness monitor on its
+own alarm path, which shares neither Cloud Scheduler nor this service's SMTP
+rail. Until that watcher gates on `self_check.liveness`, a stopped scheduler is
+visible on the board but alarms nowhere.
 
 ## Executed, and how that is known
 
@@ -189,9 +235,9 @@ curl -sS https://deadman-mrapac5nda-uc.a.run.app/ \
 `undeclared_surfaces` is built from `store.latest_per_surface()` (see
 `src/deadman/verify/collector_liveness.py`), so `self:sweep` appearing there is
 the store confirming it holds self-check evidence. It is listed rather than
-judged because no collector declares a cadence for it — the scheduler is not a
-collector, and inventing an expectation for it here would be a number nobody
-declared.
+judged there because no collector declares a cadence for it; the judgement,
+against the scheduler's own declared cadence, is the board's `self_check`
+field above.
 
 This section previously said steps 1–3 were documented but not executed. That
 was true when it was written and stopped being true in DM2.6; a runbook whose
