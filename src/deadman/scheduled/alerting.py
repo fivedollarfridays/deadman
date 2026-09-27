@@ -14,11 +14,13 @@ reads the store, and it is already the thing whose own death is watched by
 ``self:sweep`` liveness — so the alarm inherits a cadence someone is
 watching, rather than growing a second clock nobody watches.
 
-**What fires:** every FAULT (collected or local), every surface gone stale,
+**What fires:** every FAULT (collected or local), every local blind spot
+except the named one, every surface gone stale,
 and every declared collector that is silent or has never reported. **What
-does not:** healthy rows, and the service's own permanently-blind local
-probes — the container has no brief log by design, and paging a human four
-times an hour about topology teaches them to delete the alarm.
+does not:** healthy rows, and the one local probe named in
+``_PERMANENTLY_BLIND_LOCAL`` — the container has no brief log by design, and
+paging a human four times an hour about topology teaches them to delete the
+alarm. Every *other* local blind spot alarms: only the named probe is exempt.
 
 **Known limit, stated:** the throttle window lives in instance memory, so a
 Cloud Run cold start forgets it and a persisting fault may re-alert early.
@@ -126,7 +128,7 @@ def evaluate(
             fired += 1
 
     for row in local_evidence:
-        if row.observation is Observation.FAULT:
+        if _local_alertable(row):
             channel.alert(
                 row.surface,
                 row.observation.value,
@@ -136,6 +138,18 @@ def evaluate(
             fired += 1
 
     return fired
+
+
+def _local_alertable(row: Evidence) -> bool:
+    """A local FAULT always alarms; a local blind spot alarms unless its
+    surface is named in :data:`_PERMANENTLY_BLIND_LOCAL`. Only the named probe
+    is exempt: an unexpected blind spot is the instrument failing, and that is
+    exactly what this project exists to say out loud."""
+    if row.observation is Observation.FAULT:
+        return True
+    return (
+        row.observation is Observation.UNOBSERVABLE and row.surface not in _PERMANENTLY_BLIND_LOCAL
+    )
 
 
 def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:

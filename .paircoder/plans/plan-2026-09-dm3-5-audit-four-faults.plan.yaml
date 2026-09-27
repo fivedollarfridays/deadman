@@ -1,0 +1,12 @@
+id: plan-2026-09-dm3-5-audit-four-faults
+title: DM3.5-DM3.8 — four dangerous faults from the 2026-09-27 audit
+type: bugfix
+status: in_progress
+created_at: '2026-09-27T16:54:10.815756+00:00'
+skills:
+- planning-with-pm
+goals:
+- A stopped scheduler becomes visible to an independent watcher
+- A fault that recurs after a heal alarms again
+- The out-of-band check compares transport identity, not labels
+- Every local blind spot alarms except the one named probe
