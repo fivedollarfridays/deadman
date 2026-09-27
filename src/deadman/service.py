@@ -10,6 +10,10 @@ surfaces that need no credentials are wired in here; a probe that raised or
 returned nonsense is not an outage in this endpoint, it is another row on the
 board, which is the entire point of the never-raise contract it is built on.
 
+The same board is served as HTML with Open Graph tags to link unfurlers and
+to callers that ask for ``text/html``; everyone else, which is every existing
+client, still gets JSON. See :mod:`deadman.preview`.
+
 ``POST /evidence`` is how the surfaces that *do* need credentials — or that
 live on a machine Cloud Run cannot reach at all — get onto that board. See
 :mod:`deadman.ingest` for what changes about a claim when it crosses that
@@ -37,7 +41,7 @@ from pathlib import Path
 from wsgiref.simple_server import make_server
 
 from deadman import board as board_memory
-from deadman import redact
+from deadman import preview, redact
 from deadman import scheduled as scheduled_pkg
 from deadman.evidence.model import Evidence, Observation
 from deadman.ingest.auth import secret_from_env
@@ -272,6 +276,9 @@ def make_app(
             status, payload = scheduled.handle(environ)
             return _respond(start_response, status, payload)
 
+        if path == preview.CARD_PATH:
+            return preview.serve_card(environ, start_response)
+
         if method != "GET":
             return _respond(start_response, _METHOD_NOT_ALLOWED, {"error": "method not allowed"})
 
@@ -281,6 +288,8 @@ def make_app(
             liveness=liveness_fn() if liveness_fn is not None else None,
             store=store,
         )
+        if preview.wants_html(environ):
+            return preview.respond_page(environ, start_response, board)
         return _respond(start_response, "200 OK", board)
 
     return app

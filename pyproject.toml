@@ -41,9 +41,20 @@ gemini = [
 firestore = [
     "google-cloud-firestore>=2.16,<3",
 ]
+# Only for scripts/render_og_card.py, which draws the link-preview card once
+# so it can be committed. The service serves the committed PNG and never
+# imports this; the suite skips the one test that re-renders it.
+card = [
+    "Pillow>=10.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The Dockerfile installs non-editable, so the preview card must be declared
+# or the image ships without it (tests/test_preview_card.py checks this).
+[tool.setuptools.package-data]
+"deadman.preview" = ["og-card.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
