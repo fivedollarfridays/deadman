@@ -1,6 +1,6 @@
 # Current State
 
-> Last updated: 2026-09-27 15:13 UTC
+> Last updated: 2026-09-27 21:00 UTC
 
 <!-- paircoder:state:begin -->
 ## Active Plan
@@ -145,6 +145,7 @@ existing point-solution monitors; a general surface registry.
 
 ## What Was Just Done
 
+- **DM3.5-DM3.8 done**: the four dangerous faults from the 2026-09-27 audit (see the 2026-09-27 entry at the end)
 - **DM3.4 done**: Open Graph preview for the public board (see the 2026-09-27 entry at the end)
 - **DM3.3 done** (auto-updated by hook)
 
@@ -1698,6 +1699,10 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 ## What's Next
 
+- DM3.5-DM3.8: after merge, deploy from the rig (`--update-env-vars` only). Then a separate ops PR: the board
+  watcher writes no heartbeat unless the board's `self_check.liveness` is `live`, so a stopped Cloud Scheduler
+  alarms on the ops clock. Owner decision: declare the morning brief's SMTP account (hashed) under
+  `transports` in `infra/collector/collectors.json`; if the alarm shares it, the service will refuse to boot.
 - DM3.4: deploy the Open Graph preview from the rig after merge (`--update-env-vars` only), then verify the
   LinkedIn preview with Post Inspector.
 
@@ -2091,3 +2096,25 @@ file, the scheduled self-check writes the store, so bot fetches cannot mask it) 
 
 **What's next:** after merge, deploy from the rig with `--update-env-vars` only (never `--set-env-vars`, which
 wipes the ingest secret), then check the board URL in LinkedIn's Post Inspector.
+
+## 2026-09-27 — DM3.5-DM3.8 DONE ✓: the four dangerous faults the audit found
+
+**Task list:** DM3.5 ✓, DM3.6 ✓, DM3.7 ✓, DM3.8 ✓ (plan `plan-2026-09-dm3-5-audit-four-faults`). Each fault was
+reproduced first by a failing test through the production path (the scheduled endpoint, `default_alarm`, or
+`GET /`), then fixed.
+
+- **DM3.5 (D1, C3): nothing watched the scheduler.** Every alarm runs inside `POST /self-check`; `self:sweep` was
+  never judged and its window was 30h. `GET /` now carries an additive `self_check` object (`surface`, `liveness`,
+  `last_run_at`, `age_seconds`, `window_seconds`, `interval_seconds`) from `deadman.scheduled.freshness`, judged
+  against three 15-minute intervals. The service cannot alarm on its own scheduler; an independent watcher (ops'
+  board watcher) must gate on this field. `infra/scheduler.md` corrected and documents the contract.
+- **DM3.6 (D2): a re-fault after a heal was throttled.** `ThrottledAlertChannel.recover` clears a key's window and
+  sends one recovery notice if that key had alerted; `evaluate` calls it for healthy rows. Pinned end to end with a
+  fake clock seam on the endpoint and a fake SMTP class.
+- **DM3.7 (D3): out of band was checked on spelling.** `EmailTransport.identity` (`smtp:<host>/<account>`) is
+  compared with an optional per-collector `transports` declaration (plain or `sha256:`); a match refuses at
+  construction and propagates out of `default_alarm`. The committed declaration has no `transports`, so the live
+  config is not refused; that is the owner's call.
+- **DM3.8 (D4): all local blindness was silent.** Only the surface named in `_PERMANENTLY_BLIND_LOCAL` is exempt.
+
+**Proven:** 748 passed, ruff check and format clean, `arch check --strict` clean. Not merged, not deployed.
