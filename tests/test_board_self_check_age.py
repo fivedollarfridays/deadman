@@ -125,3 +125,31 @@ def test_the_scheduled_endpoint_itself_judges_an_hour_gap_as_stale():
     payload = _trigger(_service(store))
 
     assert payload["liveness_before"] == "stale"
+
+
+class _UnreadableSelfCheckStore(InMemoryEvidenceStore):
+    """A store whose read of ``self:sweep`` fails, as a Firestore hiccup would."""
+
+    def latest(self, surface: str):
+        if surface == "self:sweep":
+            raise ConnectionError("store unavailable")
+        return super().latest(surface)
+
+
+def test_an_unreadable_self_check_record_reads_no_evidence_and_the_board_still_serves():
+    status, board = _call(_service(_UnreadableSelfCheckStore()))
+
+    assert status == "200 OK"
+    assert board["self_check"]["liveness"] == "no_evidence"
+    assert board["self_check"]["age_seconds"] is None
+
+
+def test_a_naive_stored_timestamp_reads_no_evidence_rather_than_taking_the_board_down():
+    store = InMemoryEvidenceStore()
+    naive = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+    StoreSelfEvidenceLog(store=store).record(sweep_size=1, blind=0, when=naive)
+
+    status, board = _call(_service(store))
+
+    assert status == "200 OK"
+    assert board["self_check"]["liveness"] == "no_evidence"

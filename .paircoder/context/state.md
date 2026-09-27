@@ -2131,3 +2131,8 @@ reuses conftest's scheduler secret (the secrets gate matched a `SECRET = "..."` 
 declared account is published. Noted the D1 ops dependency here. Declined: syncing `_PERMANENTLY_BLIND_LOCAL`
 with the probe set (the deployed local probe set is the disk probe alone, blind only when statvfs fails, which
 should alarm) and the wiring flag on `real_monitored_surfaces` (unwired on main already, audit cosmetic list).
+
+**Review round 2 (PR #29, final):** `self_check` on the board now reads `no_evidence` when the `self:sweep` record
+cannot be read or parsed, instead of failing `GET /`. Declined, with reasons in the PR: the ops-side half of D1
+and declaring a real transport in the committed config (both outside this PR by its contract), caching the
+one-row read, and the `recover` protocol widening (every implementer checked). 749 passed.

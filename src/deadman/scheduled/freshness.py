@@ -12,8 +12,9 @@ shape is a contract with the independent watcher (see ``infra/scheduler.md``,
 "Who watches the scheduler"):
 
 - ``surface``: always ``self:sweep``.
-- ``liveness``: ``live``, ``stale`` or ``no_evidence``; anything but ``live``
-  means the alarm path has not run inside the window, and a watcher alarms.
+- ``liveness``: ``live``, ``stale`` or ``no_evidence`` (never recorded, or
+  the record could not be read); anything but ``live`` means the alarm path
+  is not proven to have run inside the window, and a watcher alarms.
 - ``last_run_at``: ISO-8601 instant of the newest completed scheduled sweep,
   or ``null`` if none has ever been recorded.
 - ``age_seconds``: seconds since ``last_run_at`` when the board was built, or
@@ -61,11 +62,18 @@ def board_field(store: EvidenceStore | None, now: datetime | None = None) -> dic
     if store is None:
         return field
     moment = now or datetime.now(timezone.utc)
-    result = self_check(StoreSelfEvidenceLog(store=store), window_hours=WINDOW_HOURS, now=moment)
+    try:
+        result = self_check(
+            StoreSelfEvidenceLog(store=store), window_hours=WINDOW_HOURS, now=moment
+        )
+        last = result.detail.get("last_sweep_at")
+        age = moment - datetime.fromisoformat(last) if isinstance(last, str) else None
+    except Exception:  # noqa: BLE001 — any unreadable record is the loud state
+        # A store hiccup or a malformed row must not blank the public board;
+        # it reads ``no_evidence``, which the watcher treats as an alarm.
+        return field
     field["liveness"] = result.liveness.value
-    last = result.detail.get("last_sweep_at")
-    if isinstance(last, str):
+    if age is not None:
         field["last_run_at"] = last
-        age = moment - datetime.fromisoformat(last)
         field["age_seconds"] = round(age.total_seconds(), 1)
     return field
