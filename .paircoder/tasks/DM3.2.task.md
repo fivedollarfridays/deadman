@@ -24,7 +24,7 @@ runtime:
 `~/Library/LaunchAgents/com.deadman.collector.plist` execs:
 
 ```
-/Users/kevinmasterson/Projects/deadman/.venv/bin/deadman-collector
+/Users/yourname/Projects/deadman/.venv/bin/deadman-collector
 ```
 
 and that venv holds `__editable__.deadman-0.1.0.pth` → `~/Projects/deadman/src`.

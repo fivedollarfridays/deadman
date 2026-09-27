@@ -7,7 +7,7 @@
     "observation": "fault",
     "method": "local_artifact",
     "summary": "no brief sent in 176.7h (window 30h, ~7 missed)",
-    "source": "/Users/kevinmasterson/ops/data/brief-send-log.jsonl",
+    "source": "/Users/yourname/ops/data/brief-send-log.jsonl",
     "read_at": "2026-08-11T20:39:27.797652+00:00",
     "detail": {
       "last_send_at": "2026-08-04T11:56:45.586032+00:00",

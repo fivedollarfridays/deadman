@@ -14,7 +14,7 @@
     {
       "type": "morning_brief",
       "args": {
-        "log_path": "/Users/kevin/ops/data/brief-send-log.jsonl"
+        "log_path": "/Users/yourname/ops/data/brief-send-log.jsonl"
       }
     }
   ]

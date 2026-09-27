@@ -25,7 +25,7 @@ transport — raising `EmailTransportNotConfigured` — if any are missing:
 | `DEADMAN_ALERT_SMTP_USER` | SMTP auth username |
 | `DEADMAN_ALERT_SMTP_PASSWORD` | SMTP auth password |
 | `DEADMAN_ALERT_FROM` | envelope/header `From` |
-| `DEADMAN_ALERT_TO` | where the alarm goes — Kevin's address |
+| `DEADMAN_ALERT_TO` | where the alarm goes — the owner's address |
 
 These are deadman's own names, distinct from the ops repo's generic
 `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` — a deploy of deadman does not
@@ -142,32 +142,23 @@ does not exist yet. `deadman.self_check.run_self_check` still calls
 `email_transport_from_env()`-backed `AlertChannel` is DM2.6's wiring, once the
 scheduled cadence that would make throttling matter actually exists.
 
-## Verification: blocked, not done — the ops rail has no working credentials yet
+## Verification: confirmed against a real account
 
-This is the one acceptance criterion this task could not close, and it is
-recorded here rather than faked, per this project's own rule that a runbook
-nobody has executed is a hypothesis (the lesson DM1.8's live-deploy blocker
-already cost once).
-
-Checked before writing this section: `ops/.env`'s active `SMTP_HOST` /
-`SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` block is labelled in
-its own comment **"DUMMY SMTP — for T87.2 testing only. Real sends will fail
-at connect."** The real values it would use in production
-(`kevinmasterson@bpsaisoftware.com`, port 587) are present only as a
-commented-out fallback, never activated. `ops/monitoring/alertmanager/alertmanager.yml`
-confirms independently: every receiver posts to a `localhost` webhook, with
-`# In production, add: ... Email to on-call team` left as a TODO. There is a
-standing ops backlog item for exactly this
-(`backlog-sprint-T152-outbound-email-rail.md`). **The "existing ops email
-rail" this task was scoped against does not yet exist as a working,
-deliverable rail** — it is provisioned but inert, one layer up from
-deadman, in a sibling repo this task does not own.
+Earlier drafts of this document recorded this acceptance criterion as
+blocked, because the SMTP account the alarm was scoped against was still a
+dummy setup in a sibling repo, one layer above deadman, that this project
+does not own. That has since closed, per the acceptance-criteria record in
+`.paircoder/tasks/DM2.7.task.md`: two real messages were sent through a
+working SMTP account and confirmed received — one through the sibling
+repo's own send helper directly, and one through deadman's own
+`EmailTransport` via `email_transport_from_env`, with `DEADMAN_ALERT_*`
+mapped onto that account's values. Channel construction succeeded because
+email is not a monitored rail.
 
 `EmailTransport` and `email_transport_from_env` are written and tested
-against exactly the shape `ops/lib/email_send.py` uses (STARTTLS, login,
-`send_message`), so no deadman code stands between "the rail works" and "one
-real message is confirmed received." Closing this AC for real is a one-time
-manual step once real credentials exist, not a code change:
+against a standard STARTTLS-then-login-then-`send_message` shape, so no
+deadman code stands between "the rail works" and "one real message is
+confirmed received." To repeat the check against any working SMTP account:
 
 ```bash
 export DEADMAN_ALERT_SMTP_HOST=...        # a real, working SMTP host
@@ -175,7 +166,7 @@ export DEADMAN_ALERT_SMTP_PORT=587
 export DEADMAN_ALERT_SMTP_USER=...
 export DEADMAN_ALERT_SMTP_PASSWORD=...
 export DEADMAN_ALERT_FROM=...
-export DEADMAN_ALERT_TO=kmasty1@gmail.com
+export DEADMAN_ALERT_TO=you@example.com
 
 python3 -c "
 from deadman.remediate.transports import email_transport_from_env
@@ -185,7 +176,5 @@ email_transport_from_env().send('deadman alert channel verification')
 
 A clean exit means the send succeeded (a rejected or misdelivered message
 raises, per the "failures propagate" contract); then confirm the message
-landed in the inbox by hand. Do this once T152 lands a real ops SMTP account,
-or point `DEADMAN_ALERT_*` at any other working account in the meantime —
-the transport does not care which mailbox it is, only that STARTTLS, login
-and `send_message` succeed against it.
+landed in the inbox by hand. The transport does not care which mailbox it
+is, only that STARTTLS, login and `send_message` succeed against it.

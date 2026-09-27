@@ -107,12 +107,12 @@ class TestTheBoardDoesNotRepublishTheEstate:
             summary="no brief in 162h",
             source="probe:MorningBriefProbe",
             read_at=NOW,
-            detail={"path": "/Users/kevinmasterson/ops/data/brief-send-log.jsonl"},
+            detail={"path": "/Users/yourname/ops/data/brief-send-log.jsonl"},
         )
 
         published = _evidence_row(evidence)
 
-        assert "kevinmasterson" not in str(published)
+        assert "yourname" not in str(published)
         assert "path" in published["detail"].get("withheld", [])
 
     def test_collector_identity_is_withheld_from_detail(self):
@@ -150,12 +150,12 @@ class TestTheBoardDoesNotRepublishTheEstate:
             observation=Observation.FAULT,
             method=Method.LOCAL_ARTIFACT,
             summary="stale",
-            source="/Users/kevinmasterson/ops/data/brief-send-log.jsonl",
+            source="/Users/yourname/ops/data/brief-send-log.jsonl",
             read_at=NOW,
             detail={},
         )
 
-        assert "kevinmasterson" not in str(_evidence_row(evidence))
+        assert "yourname" not in str(_evidence_row(evidence))
 
 
 class TestCollectorAttributionIsADeliberateTopLevelField:
