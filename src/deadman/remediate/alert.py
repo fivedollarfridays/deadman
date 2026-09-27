@@ -25,14 +25,11 @@ somebody typed: the morning brief is ``cron:morning-brief`` and the alarm is
 credential kills both. So the channel also carries its real ``identity``
 (:func:`transport_identity`, e.g. ``smtp:<host>/<account>``), each monitored
 surface may declare the transport it depends on, and the channel is refused
-when the two are the same transport whatever either is called. A declaration
-may be the identity itself or ``sha256:<hex>`` of it, so a public config can
-name an account without publishing it.
+when the two are the same transport whatever either is called.
 """
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -59,12 +56,9 @@ def transport_identity(kind: str, host: str, account: str) -> str:
 
 
 def same_transport(declared: str, identity: str) -> bool:
-    """Whether a declared transport (plain, or ``sha256:<hex>`` of the plain
-    form) is ``identity``."""
-    wanted = declared.strip().lower()
-    plain = identity.strip().lower()
-    digest = hashlib.sha256(plain.encode("utf-8")).hexdigest()
-    return wanted in (plain, f"sha256:{digest}")
+    """Whether a declared transport is ``identity``, compared the way
+    :func:`transport_identity` normalises."""
+    return declared.strip().lower() == identity.strip().lower()
 
 
 @dataclass(frozen=True)

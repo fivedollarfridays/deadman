@@ -1705,7 +1705,7 @@ That file is now excluded from formatting, since bpsai-pair regenerates it.
 
 - DM3.5-DM3.8: after merge, deploy from the rig (`--update-env-vars` only). Then a separate ops PR: the board
   watcher writes no heartbeat unless the board's `self_check.liveness` is `live`, so a stopped Cloud Scheduler
-  alarms on the ops clock. Owner decision: declare the morning brief's SMTP account (hashed) under
+  alarms on the ops clock. Owner decision: declare the morning brief's SMTP account (plain text, so published) under
   `transports` in `infra/collector/collectors.json`; if the alarm shares it, the service will refuse to boot.
 - DM3.4: deploy the Open Graph preview from the rig after merge (`--update-env-vars` only), then verify the
   LinkedIn preview with Post Inspector.
@@ -2112,13 +2112,22 @@ reproduced first by a failing test through the production path (the scheduled en
   `last_run_at`, `age_seconds`, `window_seconds`, `interval_seconds`) from `deadman.scheduled.freshness`, judged
   against three 15-minute intervals. The service cannot alarm on its own scheduler; an independent watcher (ops'
   board watcher) must gate on this field. `infra/scheduler.md` corrected and documents the contract.
+  **D1 is only half closed by this PR:** until the ops watcher gates on `self_check.liveness`, a stopped scheduler
+  is visible on the board but alarms nowhere. The ops half is a separate PR.
 - **DM3.6 (D2): a re-fault after a heal was throttled.** `ThrottledAlertChannel.recover` clears a key's window and
   sends one recovery notice if that key had alerted; `evaluate` calls it for healthy rows. Pinned end to end with a
   fake clock seam on the endpoint and a fake SMTP class.
 - **DM3.7 (D3): out of band was checked on spelling.** `EmailTransport.identity` (`smtp:<host>/<account>`) is
-  compared with an optional per-collector `transports` declaration (plain or `sha256:`); a match refuses at
+  compared with an optional per-collector `transports` declaration; a match refuses at
   construction and propagates out of `default_alarm`. The committed declaration has no `transports`, so the live
   config is not refused; that is the owner's call.
 - **DM3.8 (D4): all local blindness was silent.** Only the surface named in `_PERMANENTLY_BLIND_LOCAL` is exempt.
 
 **Proven:** 748 passed, ruff check and format clean, `arch check --strict` clean. Not merged, not deployed.
+
+**Review round 1 (PR #29):** fixed a garbled step 3 in `infra/scheduler.md` (a bad doc edit); the harness now
+reuses conftest's scheduler secret (the secrets gate matched a `SECRET = "..."` literal); dropped the
+`sha256:` declaration form (an unsalted hash of a guessable account name hides nothing) and documented that a
+declared account is published. Noted the D1 ops dependency here. Declined: syncing `_PERMANENTLY_BLIND_LOCAL`
+with the probe set (the deployed local probe set is the disk probe alone, blind only when statvfs fails, which
+should alarm) and the wiring flag on `real_monitored_surfaces` (unwired on main already, audit cosmetic list).

@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import pytest
+from conftest import TEST_SCHEDULER_SECRET
 
 from deadman.evidence.model import Evidence, Method, Observation, unobservable
 from deadman.scheduled.alerting import alarm_from_env
@@ -24,8 +25,7 @@ from deadman.scheduled.endpoint import ScheduledSelfCheckEndpoint
 from deadman.self_check import StoreSelfEvidenceLog
 from deadman.store.memory import InMemoryEvidenceStore
 
-SECRET = "harness-scheduler-secret"
-AUTHORIZED = {"HTTP_AUTHORIZATION": f"Bearer {SECRET}"}
+AUTHORIZED = {"HTTP_AUTHORIZATION": f"Bearer {TEST_SCHEDULER_SECRET}"}
 T0 = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 #: Placeholder SMTP settings on reserved example domains; nothing resolves.
@@ -114,7 +114,7 @@ def production_endpoint(
     return ScheduledSelfCheckEndpoint(
         probes_fn=lambda: list(probes),
         self_log=StoreSelfEvidenceLog(store=store),
-        secret=SECRET,
+        secret=TEST_SCHEDULER_SECRET,
         alarm=alarm_from_env(store=store, monitored=list(monitored), environ=dict(ALERT_ENV)),
         **extra,
     )

@@ -71,8 +71,8 @@ class CollectorExpectation:
 
     transports: tuple[tuple[str, str], ...] = ()
     """``(surface, transport)`` pairs: the real transport a surface depends
-    on (``smtp:<host>/<account>``, or ``sha256:<hex>`` of it), so the alarm
-    can refuse to share it. Optional; see :mod:`deadman.remediate.alert`."""
+    on (``smtp:<host>/<account>``), so the alarm can refuse to share it.
+    Optional; see :mod:`deadman.remediate.alert`."""
 
     @property
     def silence_after_seconds(self) -> float:

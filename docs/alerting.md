@@ -69,9 +69,8 @@ in `PROOF.md` one layer down.
 So the channel also compares real transports. `EmailTransport.identity` is
 `smtp:<host>/<account>`, built from the SMTP host and login it actually sends
 with. A monitored surface declares the transport it depends on in the
-collector declaration's optional `transports` object (see `infra/README.md`;
-a value may be the identity or `sha256:<hex>` of it, so a public config does
-not have to publish an account). `AlertChannel` raises `AlertChannelInvalid`
+collector declaration's optional `transports` object (see `infra/README.md`,
+including why a declared account is published in plain text). `AlertChannel` raises `AlertChannelInvalid`
 at construction when its identity matches any declared transport, whatever
 either is named, and `default_alarm` lets that propagate: the service refuses
 to boot, as documented above, instead of degrading to "unconfigured".
@@ -79,8 +78,8 @@ to boot, as documented above, instead of degrading to "unconfigured".
 **The check is only as complete as the declaration.** A surface whose
 transport is not declared cannot be compared, so the committed
 `infra/collector/collectors.json` declares none today and the live alarm is
-not refused by it. Declaring the morning brief's real account (hashed) is the
-owner's decision, and if the alarm shares that account, the deploy will refuse
+not refused by it. Declaring the morning brief's real account is the owner's
+decision, and if the alarm shares that account, the deploy will refuse
 to start until the alarm moves to a different one.
 
 ## The throttle: a documented window, and one absolute exception

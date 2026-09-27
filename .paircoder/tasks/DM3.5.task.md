@@ -49,3 +49,9 @@ for a 15-minute job.
 # Verification
 
 - Full suite green; ruff check, ruff format --check, arch check --strict clean
+
+# Note
+
+This task publishes the self-check's age; it does not by itself alarm. D1 is
+closed only when the ops board watcher gates on `self_check.liveness`, which is
+a separate ops-repo change.

@@ -18,7 +18,6 @@ calls at startup, reading the environment and the declaration file.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -67,14 +66,6 @@ def test_identity_ignores_case_and_surrounding_space(configure):
     configure({"cron:nightly-report": "  SMTP:smtp.ALARM.example/Alarm-Bot@alarm.example "})
 
     with pytest.raises(AlertChannelInvalid, match="cron:nightly-report"):
-        default_alarm(InMemoryEvidenceStore())
-
-
-def test_a_hashed_declaration_is_compared_without_publishing_the_account(configure):
-    digest = hashlib.sha256(ALARM_IDENTITY.encode()).hexdigest()
-    configure({"cron:morning-brief": f"sha256:{digest}"})
-
-    with pytest.raises(AlertChannelInvalid, match="cron:morning-brief"):
         default_alarm(InMemoryEvidenceStore())
 
 

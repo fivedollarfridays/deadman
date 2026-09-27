@@ -110,13 +110,9 @@ Trigger one run by hand rather than waiting for the cadence:
 gcloud scheduler jobs run deadman-self-check --location=us-central1
 ```
 
-Then read the row back through the store — not by choice, not because the two schedulers need to agree — see "Two
-independent clocks" below for why they deliberately do not. The service
-declares this cadence as `SCHEDULER_INTERVAL_SECONDS` and judges the
-self-check stale after three intervals (`WINDOW_SECONDS`, 45 minutes), both in
-`src/deadman/scheduled/freshness.py`. **Change the schedule here and that
-constant together.** (The window used to be the daily CLI's 30 hours, which
-read a scheduler dead for a day as live.)
+Then read the row back through the store, not through the job. (`GET /`
+also shows it now, as the `self_check` field; see "Who watches the
+scheduler" below. The store read is the one that proves the write landed.)
 
 ```bash
 python3 -c "
