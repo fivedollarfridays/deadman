@@ -3,7 +3,8 @@
 Nothing here constructs an alarm. Each sweep asks
 :func:`deadman.service.default_scheduled` for the endpoint the deployed
 service builds (``default_alarm`` from ``DEADMAN_ALERT_*``, the real
-``default_probes``, real collector liveness from ``assess``) and triggers it
+``default_probes`` with both in-container probes switched off as the
+deployment has them, real collector liveness from ``assess``) and triggers it
 with an authenticated ``POST /self-check`` through the WSGI app. A new
 endpoint is built for EVERY sweep over one persistent store, which is what a
 Cloud Run cold start is. Replaced: the SMTP socket, and the endpoint's clock.
@@ -38,11 +39,15 @@ EXPECTATIONS = (
 
 
 @pytest.fixture
-def outbox(monkeypatch: pytest.MonkeyPatch, tmp_path) -> list[str]:
+def outbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Both in-container probes are off, as on Cloud Run. The disk probe in
+    particular reads the machine the suite runs on: on a CI runner whose free
+    space moves during the run it reports a real trend fault, and a test about
+    the collector's alerts then counts a mail it did not cause."""
     for name, value in ALERT_ENV.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setenv(service.BRIEF_LOG_ENV, "")
-    monkeypatch.setenv("DEADMAN_DISK_HISTORY", str(tmp_path / "disk-history.jsonl"))
+    monkeypatch.setenv(service.DISK_HISTORY_ENV, "")
     monkeypatch.delenv(service.COLLECTORS_ENV, raising=False)
     return install_fake_smtp(monkeypatch)
 
@@ -141,13 +146,16 @@ def test_a_heal_through_the_deployed_wiring_sends_one_recovery_per_surface(outbo
     assert {hours for hours, _ in sent} == {0}
 
 
-def test_the_alarm_is_checked_against_the_probe_list_the_board_really_sweeps(outbox, store):
+def test_the_alarm_is_checked_against_the_probe_list_the_board_really_sweeps(
+    outbox, store, monkeypatch, tmp_path
+):
     """``default_alarm`` takes the service's own surfaces from
     ``real_monitored_surfaces``, the one reader of ``default_probes``, so a
     probe added to the board is out of bounds for the alarm with no second
     list to update."""
     from deadman.remediate.transports import real_monitored_surfaces
 
+    monkeypatch.setenv(service.DISK_HISTORY_ENV, str(tmp_path / "disk-history.jsonl"))
     alarm = service.default_scheduled(store, EXPECTATIONS).alarm
     swept = [probe.surface for probe in service.default_probes()]
 
