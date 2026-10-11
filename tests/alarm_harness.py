@@ -18,12 +18,13 @@ from email.message import EmailMessage
 
 import pytest
 from conftest import TEST_SCHEDULER_SECRET
+from firestore_double import FakeFirestoreClient
 
 from deadman.evidence.model import Evidence, Method, Observation, unobservable
 from deadman.scheduled.alerting import alarm_from_env
 from deadman.scheduled.endpoint import ScheduledSelfCheckEndpoint
 from deadman.self_check import StoreSelfEvidenceLog
-from deadman.store.memory import InMemoryEvidenceStore
+from deadman.store import EvidenceStore, FirestoreEvidenceStore, InMemoryEvidenceStore
 
 AUTHORIZED = {"HTTP_AUTHORIZATION": f"Bearer {TEST_SCHEDULER_SECRET}"}
 T0 = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
@@ -43,6 +44,8 @@ class FakeSMTP:
     """Stands in for :class:`smtplib.SMTP`; records every delivered body."""
 
     sent: list[str] = []
+    down: bool = False
+    """Set by a test to make every delivery raise, as a dead mail rail does."""
 
     def __init__(self, host: str, port: int, timeout: float = 0) -> None:
         self.host = host
@@ -60,12 +63,15 @@ class FakeSMTP:
         return None
 
     def send_message(self, msg: EmailMessage) -> None:
+        if FakeSMTP.down:
+            raise ConnectionError("smtp rail is down")
         FakeSMTP.sent.append(msg.get_content())
 
 
 def install_fake_smtp(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Patch the SMTP class the real transport constructs; return the outbox."""
     FakeSMTP.sent = []
+    FakeSMTP.down = False
     monkeypatch.setattr("deadman.remediate.transports.smtplib.SMTP", FakeSMTP)
     return FakeSMTP.sent
 
@@ -103,13 +109,26 @@ class StaticProbe:
         )
 
 
+#: Every backend the deployed service can run on. The Firestore one is the
+#: real backend over the in-process client double, as in the contract suite.
+STORE_FACTORIES: dict[str, Callable[[], EvidenceStore]] = {
+    "memory": InMemoryEvidenceStore,
+    "firestore": lambda: FirestoreEvidenceStore(client=FakeFirestoreClient()),
+}
+
+
 def production_endpoint(
     probes: list[StaticProbe],
     clock: Callable[[], datetime] | None = None,
     monitored: tuple[str, ...] = ("host:disk/",),
+    store: EvidenceStore | None = None,
 ) -> ScheduledSelfCheckEndpoint:
-    """The scheduled endpoint wired the way :func:`deadman.service.default_scheduled` is."""
-    store = InMemoryEvidenceStore()
+    """The scheduled endpoint wired the way :func:`deadman.service.default_scheduled` is.
+
+    Every call builds a brand new alarm. Pass the same ``store`` to two calls
+    and the second is what a cold start is: nothing shared but the store.
+    """
+    store = InMemoryEvidenceStore() if store is None else store
     extra = {} if clock is None else {"clock": clock}
     return ScheduledSelfCheckEndpoint(
         probes_fn=lambda: list(probes),
@@ -118,3 +137,31 @@ def production_endpoint(
         alarm=alarm_from_env(store=store, monitored=list(monitored), environ=dict(ALERT_ENV)),
         **extra,
     )
+
+
+def sweep_for(
+    endpoint_for_sweep: Callable[[], ScheduledSelfCheckEndpoint],
+    clock: Clock,
+    outbox: list[str],
+    hours: float,
+    step_minutes: float = 15,
+    before_sweep: Callable[[float], None] | None = None,
+) -> list[tuple[float, str]]:
+    """Trigger a sweep every ``step_minutes`` for ``hours`` (both ends
+    included), asking ``endpoint_for_sweep`` for the endpoint each time so a
+    test chooses between one warm instance and a cold start per sweep.
+    ``before_sweep`` is told the hours elapsed, to change what a probe says.
+    Returns ``(hours since the clock's start, body)`` for every mail sent."""
+    start = clock.now
+    sent: list[tuple[float, str]] = []
+    for index in range(int(hours * 60 / step_minutes) + 1):
+        if index:
+            clock.advance(step_minutes)
+        if before_sweep is not None:
+            before_sweep((clock.now - start).total_seconds() / 3600)
+        before = len(outbox)
+        status, _ = endpoint_for_sweep().handle(dict(AUTHORIZED))
+        assert status.startswith("200")
+        elapsed = (clock.now - start).total_seconds() / 3600
+        sent.extend((elapsed, body) for body in outbox[before:])
+    return sent

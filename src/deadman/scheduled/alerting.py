@@ -22,10 +22,17 @@ does not:** healthy rows, and the one local probe named in
 paging a human four times an hour about topology teaches them to delete the
 alarm. Every *other* local blind spot alarms: only the named probe is exempt.
 
-**Known limit, stated:** the throttle window lives in instance memory, so a
-Cloud Run cold start forgets it and a persisting fault may re-alert early.
-That is a bounded repeat of a true alarm, which this project will accept;
-a durable throttle is DM3 work if the repeats annoy in practice.
+**Repeats back off, durably.** A persisting fault alerts at once, then at
+6 h, 12 h after that, then every 24 h, and a heal sends exactly one recovery
+notice. The record of what was sent lives in the evidence store, not in this
+instance, so a Cloud Run cold start decides exactly as a warm instance does.
+See :mod:`deadman.scheduled.backoff`, which replaced a one hour in-memory
+throttle after one incident sent 39 emails in 45 hours.
+
+**Known limit, stated:** two sweeps that overlap (a retried Cloud Scheduler
+attempt racing the original) can both read the record before either writes
+it, and both send. That is one duplicate of a true alarm, bounded by the
+number of overlapping sweeps, and it is the loud direction to be wrong in.
 """
 
 from __future__ import annotations
@@ -38,10 +45,11 @@ from typing import Protocol
 from deadman.evidence.model import Evidence, Observation
 from deadman.remediate.alert import AlertChannel
 from deadman.remediate.transports import (
-    ThrottledAlertChannel,
     email_transport_from_env,
+    real_monitored_surfaces,
     record_transport_failures,
 )
+from deadman.scheduled.backoff import DurableBackoffAlarm
 from deadman.store.base import EvidenceStore
 from deadman.verify.collector_liveness import LivenessReport, collector_surface
 
@@ -55,13 +63,13 @@ class AlarmUnconfigured(RuntimeError):
 
 
 class Alarm(Protocol):
-    """What :func:`evaluate` needs: the throttled channel's alert shape."""
+    """What :func:`evaluate` needs: the backoff alarm's alert shape."""
 
     def alert(self, key: str, state: str, message: str, *, now: datetime | None = None) -> None:
-        """Deliver, throttled per ``(key, state)``."""
+        """Deliver unless it is a repeat of ``(key, state)`` that is not yet due."""
 
     def recover(self, key: str, message: str, *, now: datetime | None = None) -> bool:
-        """Reset ``key``'s throttle after a heal; notify only if it had alerted."""
+        """Close ``key``'s episode after a heal; notify only if it had alerted."""
 
 
 def alarm_from_env(
@@ -69,9 +77,10 @@ def alarm_from_env(
     monitored: Sequence[str],
     environ: Mapping[str, str] | None = None,
     monitored_transports: Mapping[str, str] | None = None,
-) -> ThrottledAlertChannel:
+) -> DurableBackoffAlarm:
     """The production alarm: env-configured SMTP, out-of-band checked,
-    failures recorded to the store, repeats throttled.
+    failures recorded to the store, repeats backed off against a send record
+    kept in that same store.
 
     Raises :class:`AlarmUnconfigured` when the environment is missing rather
     than returning a channel that silently cannot send — the caller decides
@@ -94,7 +103,7 @@ def alarm_from_env(
         identity=transport.identity,
         monitored_transports=dict(monitored_transports or {}),
     )
-    return ThrottledAlertChannel(channel=channel)
+    return DurableBackoffAlarm(channel=channel, store=store)
 
 
 def evaluate(
@@ -104,7 +113,8 @@ def evaluate(
     now: datetime | None = None,
 ) -> int:
     """Fire the alarm for everything alertable in one sweep. Returns the
-    number of alerts delivered to the channel (before throttling).
+    number of alertable rows handed to the channel (before the backoff
+    decides which of them are sent).
 
     ``liveness.rows`` are :class:`Evidence` — the same rendered rows the board
     shows — because that is what :func:`deadman.verify.collector_liveness.assess`
@@ -115,13 +125,13 @@ def evaluate(
     fixtures through the real renderers for exactly that reason.
 
     A collector row's alert state is ``detail["liveness"]`` (``stale`` /
-    ``no_evidence``) rather than its observation, so a throttled repeat and a
+    ``no_evidence``) rather than its observation, so a backed off repeat and a
     state *change* are distinguished by what actually changed.
 
-    **A healthy row resets its surface's throttle** via ``channel.recover``,
+    **A healthy row closes its surface's episode** via ``channel.recover``,
     which also sends one recovery notice if that surface had alarmed. Without
-    it the throttle never learns about a heal, and fault, heal, fault again
-    inside the window is suppressed as a repeat. A surface that alarmed on
+    it the alarm never learns about a heal, and fault, heal, fault again
+    inside the backoff is suppressed as a repeat. A surface that alarmed on
     any row this sweep is not recovered by another healthy row for it.
 
     A transport failure propagates after being recorded as evidence — the
@@ -168,7 +178,7 @@ def _local_alertable(row: Evidence) -> bool:
     )
 
 
-def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
+def default_alarm(store: EvidenceStore) -> DurableBackoffAlarm | None:
     """The production alarm, or ``None`` with a loud boot warning.
 
     Follows the ``DEADMAN_COLLECTORS`` precedent: a missing capability warns
@@ -177,11 +187,13 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
     scheduled trigger's response also carries ``alerting: unconfigured``, so
     the gap is visible on the job Cloud Scheduler is already watching.
 
-    ``monitored`` is the real list — the declared collector surfaces, their
-    collector rails, and the service's own probes — so wiring the alarm onto
-    a watched rail dies here at startup, not at the moment it is needed. The
-    service import is lazy for the same reason ``real_monitored_surfaces``'s
-    is: this module must stay importable without the service's env.
+    ``monitored`` is the real list — the service's own probes, read by
+    :func:`~deadman.remediate.transports.real_monitored_surfaces` from the
+    exact probe list the board sweeps, plus the declared collector surfaces
+    and their collector rails — so wiring the alarm onto a watched rail dies
+    here at startup, not at the moment it is needed. The service import is
+    lazy for the same reason ``real_monitored_surfaces``'s is: this module
+    must stay importable without the service's env.
 
     **An alarm that is not out of band is not caught here.** Only
     :class:`AlarmUnconfigured` degrades to ``None``; ``AlertChannelInvalid``
@@ -191,10 +203,10 @@ def default_alarm(store: EvidenceStore) -> ThrottledAlertChannel | None:
     """
     import sys
 
-    from deadman.service import default_expectations, default_probes
+    from deadman.service import default_expectations
 
     expectations = default_expectations()
-    monitored = [probe.surface for probe in default_probes()]
+    monitored = real_monitored_surfaces()
     transports: dict[str, str] = {}
     for expectation in expectations:
         monitored.append(collector_surface(expectation.collector_id))

@@ -55,7 +55,7 @@ from datetime import datetime, timezone
 
 from deadman.evidence.model import Evidence, Method, Observation
 from deadman.ingest.arrival import COLLECTOR_ID, RECEIVED_AT
-from deadman.self_check import Liveness
+from deadman.self_check import SELF_CHECK_SURFACE, Liveness
 from deadman.store.base import DEFAULT_HISTORY_LIMIT, EvidenceStore, instant
 from deadman.verify.expectations import CollectorExpectation
 from deadman.verify.surface_verdict import (
@@ -77,6 +77,15 @@ COLLECTOR_RAIL = "collector"
 #: How many rows per surface are searched for a delivery. See the module
 #: docstring for what a spool older than this does, and does not, do.
 ARRIVAL_LOOKBACK = DEFAULT_HISTORY_LIMIT
+
+#: Surfaces the service itself owns and writes, so no collector will ever
+#: declare them. They are not a configuration gap and are never listed as
+#: undeclared. ``self:sweep`` is judged against the scheduler's own cadence in
+#: the board's ``self_check`` field (:mod:`deadman.scheduled.freshness`).
+#: Deliberately not here: ``alert:email`` and ``alert:send-record``. Those are
+#: written only when the alarm itself fails, and ``undeclared_surfaces`` is
+#: the one place on the board such a row shows.
+SERVICE_OWNED_SURFACES = frozenset({SELF_CHECK_SURFACE})
 
 LAST_REPORT_AT = "last_report_at"
 SILENT_FOR_SECONDS = "silent_for_seconds"
@@ -118,7 +127,8 @@ class LivenessReport:
     stale: int
     unreported: int
     undeclared: tuple[str, ...]
-    """Surfaces the store holds evidence for that no collector declares. Shown
+    """Surfaces the store holds evidence for that no collector declares and
+    the service does not own (:data:`SERVICE_OWNED_SURFACES`). Shown
     rather than dropped — evidence arriving for an undeclared surface is a
     configuration gap — but not judged, because nothing declared a cadence to
     judge it against."""
@@ -157,7 +167,7 @@ def assess(
         fresh=kinds.count(FRESH),
         stale=kinds.count(STALE),
         unreported=kinds.count(UNREPORTED),
-        undeclared=tuple(sorted(set(latest) - declared)),
+        undeclared=tuple(sorted(set(latest) - declared - SERVICE_OWNED_SURFACES)),
     )
 
 

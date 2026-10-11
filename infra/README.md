@@ -157,11 +157,29 @@ gcloud run services update deadman --region=us-central1 \
 Read `host:disk/` on this deployment with the same suspicion. Inside Cloud
 Run it measures the container's own ephemeral filesystem, which starts
 effectively empty and reports something close to 100% free on every cold
-start. That number is true and useless: the volume this probe was written
-about is a workstation's, and no container can see it. The hosted board is a
-demonstration surface. Trending a real host means running the probe on that
-host and shipping its evidence here — which is what `POST /evidence` below is
-for.
+start (the live board read "1001.9GB free, 100.0% free, 103892339 days of
+runway"). That number is true and useless: the volume this probe was written
+about is a workstation's, and no container can see it. The real disk is
+`host:mac/disk`, shipped by the collector through `POST /evidence`.
+
+So the deployed service runs without it. Set `DEADMAN_DISK_HISTORY` **empty**
+to drop the in-container disk probe from the service's own sweep, the same
+explicit opt-out as `DEADMAN_BRIEF_LOG` above:
+
+```bash
+gcloud run services update deadman --region=us-central1 \
+  --update-env-vars=DEADMAN_DISK_HISTORY=
+```
+
+With it empty the board has no `host:disk/` row, counts no blind spot for it,
+and the alarm has nothing to page about, because the probe is not run at all.
+Left unset, the variable keeps its default path and the probe runs, which is
+what a local run and the test suite want. To switch it back on later, set a
+path again (`--update-env-vars=DEADMAN_DISK_HISTORY=/tmp/deadman/disk-history.jsonl`).
+
+With both probes off the service sweeps nothing itself (`sweep_size: 0` on
+`POST /self-check`), and every row on the board comes from a collector. That
+is the intended shape on Cloud Run, not a fault.
 
 ## Configuration
 
@@ -174,7 +192,7 @@ for.
 | `DEADMAN_FIRESTORE_PROJECT` | the SDK's default | GCP project holding the Firestore database. |
 | `DEADMAN_COLLECTORS` | unset — **the service warns on stderr and watches nobody's silence** | Path to the collector liveness declaration (see "Collector liveness" below). A named file that cannot be read or parsed is a startup failure. |
 | `DEADMAN_BRIEF_LOG` | `/var/log/deadman/morning-brief.jsonl` | Path the morning-brief probe reads. Set empty to disable the service-side probe (the surface then rides in via ingest only). |
-| `DEADMAN_DISK_HISTORY` | `/tmp/deadman/disk-history.jsonl` | Where the disk probe appends its trend samples. Cloud Run's filesystem is ephemeral per instance, so the trend resets on every cold start — acceptable for the demo board; a persistent volume is out of scope for this task. |
+| `DEADMAN_DISK_HISTORY` | `/tmp/deadman/disk-history.jsonl` | Where the in-container disk probe appends its trend samples. Set empty to disable the probe (no `host:disk/` row); the Cloud Run deployment does, because the container's own disk is not a surface anyone needs watched. |
 
 ## Ingest: `POST /evidence`
 
@@ -311,6 +329,15 @@ gcloud firestore databases create --location=nam5
 The Cloud Run service account also needs `roles/datastore.user`. As with the
 invoker binding above, a missing role here produces a startup failure whose
 message names permissions rather than configuration.
+
+The service uses two top-level collections in that database. `evidence` holds
+one document per surface with its rows beneath it. `alert_state` holds one
+document per alerted surface: the alarm's send record, which is what makes
+the repeat backoff (6 h, 12 h, then every 24 h; see `docs/alerting.md`)
+survive a cold start. Firestore creates a collection on its first write, every
+read is by document id or an ordered range over one subcollection, and
+`roles/datastore.user` covers the whole database, so `alert_state` needs no
+index, no setup step and no new IAM binding.
 
 ### What arrives is not what was observed
 
