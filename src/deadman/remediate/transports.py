@@ -18,12 +18,11 @@ probe list the board runs, so a surface added there is automatically out of
 bounds for the alarm — nobody has to remember to update a second list by
 hand.
 
-**A throttle that cannot swallow a state change.** A persistent fault
-sweeps on every cadence, and resending an unchanged fault every time is
-alarm-fatigue-by-design. But a transition — fault to healthy or healthy to
-fault — is the one thing this whole project exists to surface, so
-:class:`ThrottledAlertChannel` only ever suppresses a *repeat* of the
-previous state, never a change from it.
+**Repeats are not decided here.** This module once held an in-memory, one
+hour repeat throttle. It forgot itself on every Cloud Run cold start and let
+one incident send 39 emails in 45 hours, so it was replaced, not extended, by
+the durable backoff in :mod:`deadman.scheduled.backoff`. What stays here is
+the rail: how one message is sent, and what happens when it cannot be.
 
 **A transport failure becomes evidence, not silence.**
 :func:`record_transport_failures` wraps a ``send`` callable so a raised
@@ -37,24 +36,17 @@ from __future__ import annotations
 import os
 import smtplib
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Any
 
 from deadman.evidence.model import Evidence, Method, Observation
-from deadman.remediate.alert import AlertChannel, transport_identity
+from deadman.remediate.alert import transport_identity
 from deadman.store.base import EvidenceStore
 
 #: One line, no config: the alert body is the whole message and nothing in
 #: this project reads a subject line programmatically.
 DEFAULT_SUBJECT = "deadman alert"
-
-#: A persistent fault sweeps on every cadence; without a floor here, an
-#: unwatched interval sweep would resend the same fault every run. An hour
-#: is long enough to stop that and short enough that a human still hears
-#: about a real, ongoing fault well inside a working day.
-DEFAULT_THROTTLE_WINDOW = timedelta(hours=1)
 
 #: Where a failed alert attempt is recorded. Distinct from every monitored
 #: surface's own rail id so it can never collide with the out-of-band check.
@@ -144,8 +136,7 @@ def real_monitored_surfaces() -> list[str]:
     Read from :func:`deadman.service.default_probes` — the exact list the
     board sweeps — rather than retyped as a literal that can silently drift
     out of sync with what is actually monitored. Imported lazily so this
-    module stays cheap to import for callers that only want the transport or
-    the throttle.
+    module stays cheap to import for callers that only want the transport.
     """
     from deadman.service import default_probes
 
@@ -184,45 +175,3 @@ def record_transport_failures(
             raise
 
     return wrapped
-
-
-@dataclass
-class ThrottledAlertChannel:
-    """Suppresses a repeat of the same state inside a window; a state change
-    is delivered immediately regardless of how recently the last alert
-    fired. A caller that only ever alerts on bad states must call
-    :meth:`recover` when a key heals, or the next fault inside the window
-    reads as a repeat of the last one.
-
-    ``key`` scopes the window per caller (e.g. per surface, or "self_check")
-    so two unrelated alarms never share one throttle clock.
-    """
-
-    channel: AlertChannel
-    window: timedelta = DEFAULT_THROTTLE_WINDOW
-    _last: dict[str, tuple[str, datetime]] = field(default_factory=dict, init=False, repr=False)
-
-    def alert(self, key: str, state: str, message: str, *, now: datetime | None = None) -> None:
-        moment = now or datetime.now(timezone.utc)
-        prior = self._last.get(key)
-        if prior is not None:
-            prior_state, prior_sent = prior
-            if state == prior_state and moment - prior_sent < self.window:
-                return
-        self.channel.alert(message)
-        self._last[key] = (state, moment)
-
-    def recover(self, key: str, message: str, *, now: datetime | None = None) -> bool:
-        """Tell the throttle ``key`` is healthy again. Returns whether a
-        recovery notice was sent.
-
-        Only a key that has alerted is reset and notified: the window is
-        cleared *before* the notice goes out, so a re-fault after a heal is a
-        state change even if the notice itself fails to send. A key that never
-        alerted is left alone and sends nothing, or every healthy surface
-        would mail on every cold start.
-        """
-        if self._last.pop(key, None) is None:
-            return False
-        self.channel.alert(message)
-        return True

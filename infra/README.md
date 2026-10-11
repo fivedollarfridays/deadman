@@ -312,6 +312,15 @@ The Cloud Run service account also needs `roles/datastore.user`. As with the
 invoker binding above, a missing role here produces a startup failure whose
 message names permissions rather than configuration.
 
+The service uses two top-level collections in that database. `evidence` holds
+one document per surface with its rows beneath it. `alert_state` holds one
+document per alerted surface: the alarm's send record, which is what makes
+the repeat backoff (6 h, 12 h, then every 24 h; see `docs/alerting.md`)
+survive a cold start. Firestore creates a collection on its first write, every
+read is by document id or an ordered range over one subcollection, and
+`roles/datastore.user` covers the whole database, so `alert_state` needs no
+index, no setup step and no new IAM binding.
+
 ### What arrives is not what was observed
 
 A collector reads a log on a Mac. What this service then holds is a *report

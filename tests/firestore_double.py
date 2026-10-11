@@ -14,7 +14,7 @@ with a fake transport underneath. Nothing here is implemented speculatively:
 a method the backend does not call is a method whose behaviour this file would
 be asserting from imagination.
 
-Fidelity is the point, so the double reproduces two real behaviours that are
+Fidelity is the point, so the double reproduces the real behaviours that are
 easy to get wrong and would otherwise only fail in production:
 
 * a document id containing ``/`` is rejected, because it is a path separator.
@@ -22,36 +22,19 @@ easy to get wrong and would otherwise only fail in production:
 * streaming a collection yields only documents that have field data of their
   own. In Firestore a document that exists solely as the parent of a
   subcollection is not returned by a collection query.
+* a point read (``document.get()``) of a document that was never written
+  returns a snapshot with ``exists`` false and ``to_dict()`` of ``None``; it
+  does not raise. Stored payloads are copied on the way in and out, as a
+  network round trip would.
 """
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator
 from typing import Any
 
-
-class FakeSnapshot:
-    """What ``stream()`` yields. Only ``to_dict`` is used by the backend."""
-
-    def __init__(self, doc_id: str, data: dict[str, Any]) -> None:
-        self.id = doc_id
-        self._data = dict(data)
-
-    def to_dict(self) -> dict[str, Any]:
-        return dict(self._data)
-
-
-class FakeQuery:
-    """An ordered result set, narrowable by ``limit`` and then streamed."""
-
-    def __init__(self, snapshots: list[FakeSnapshot]) -> None:
-        self._snapshots = snapshots
-
-    def limit(self, count: int) -> FakeQuery:
-        return FakeQuery(self._snapshots[:count])
-
-    def stream(self) -> Iterator[FakeSnapshot]:
-        return iter(list(self._snapshots))
+from firestore_double_reads import FakeQuery, FakeSnapshot
 
 
 class FakeCollection:
@@ -90,7 +73,12 @@ class FakeDocument:
     def set(self, payload: dict[str, Any]) -> None:
         """Whole-document write. Writing the same id twice leaves one document,
         which is what makes an identical row idempotent on this backend."""
-        self.data = dict(payload)
+        self.data = copy.deepcopy(dict(payload))
+
+    def get(self) -> FakeSnapshot:
+        """A point read. A document never written still yields a snapshot,
+        one whose ``exists`` is false, rather than raising."""
+        return FakeSnapshot(self.id, self.data)
 
     def collection(self, name: str) -> FakeCollection:
         return self._subcollections.setdefault(name, FakeCollection())

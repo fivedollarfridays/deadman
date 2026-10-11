@@ -19,6 +19,15 @@ reach the service spools its evidence and re-sends later, so rows arrive out
 of order by construction. A store that answered "latest" with "last written"
 would report a recovered surface as still broken, or worse, the reverse.
 
+**The alert send record is kept here and is not evidence.**
+:meth:`EvidenceStore.load_alert_state` and
+:meth:`EvidenceStore.save_alert_state` hold what the alarm last sent for a
+surface, so its repeat backoff survives a cold start (see
+:mod:`deadman.scheduled.backoff`). It is one overwritten record per key, kept
+beside the evidence rows and never among them: no read that enumerates
+surfaces may return it, or the alarm's bookkeeping would appear on the public
+board as an undeclared surface.
+
 **Identity is content, so replay is free.** Two rows with the same surface,
 instant, method, observation, summary, source and detail are one observation
 recorded twice, not two observations. :func:`row_id` makes that identity
@@ -75,6 +84,24 @@ class EvidenceStore(Protocol):
 
     def history(self, surface: str, limit: int = DEFAULT_HISTORY_LIMIT) -> list[Evidence]:
         """The newest ``limit`` rows for ``surface``, oldest first."""
+        ...
+
+    def load_alert_state(self, key: str) -> dict[str, Any] | None:
+        """The alert send record saved for ``key``, or ``None`` if none was.
+
+        A fresh copy: mutating it changes nothing stored. Raises when the
+        backend cannot be read; the caller decides what an unreadable record
+        means, and for the alarm it means "send".
+        """
+        ...
+
+    def save_alert_state(self, key: str, record: Mapping[str, Any]) -> None:
+        """Replace the alert send record for ``key`` with ``record``.
+
+        ``record`` must be JSON-serialisable (strings, numbers, booleans,
+        ``None``, lists and mappings of those): that is what every backend can
+        persist identically.
+        """
         ...
 
 

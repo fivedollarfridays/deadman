@@ -174,3 +174,60 @@ def test_rows_differing_only_in_read_at_are_kept_apart(store: EvidenceStore) -> 
     store.append(_evidence(read_at=T0 + timedelta(seconds=1)))
 
     assert len(store.history("test:surface")) == 2
+
+
+# --- The alert send record (DM4.1) -----------------------------------------
+#
+# The alarm's backoff must survive a cold start, so what it sent and when is
+# kept by the store. It is deliberately NOT evidence: it lives beside the
+# rows, never among them, so it can never be read as a surface.
+
+
+def test_an_alert_state_that_was_never_saved_reads_as_none(store: EvidenceStore) -> None:
+    assert store.load_alert_state("host:mac/disk") is None
+
+
+def test_alert_state_round_trips_and_a_second_save_replaces_the_first(
+    store: EvidenceStore,
+) -> None:
+    """One record per key, overwritten: the newest send is the only one the
+    backoff decision reads, so there is no history to order or cap."""
+    store.save_alert_state("host:mac/disk", {"state": "fault", "sends": 1})
+    store.save_alert_state("host:mac/disk", {"state": "fault", "sends": 2})
+
+    assert store.load_alert_state("host:mac/disk") == {"state": "fault", "sends": 2}
+
+
+def test_alert_state_is_kept_per_key(store: EvidenceStore) -> None:
+    """``service:a/b`` and ``service:a%2Fb`` are different surfaces; a key
+    that is encoded twice, or not at all, would let one overwrite the other."""
+    store.save_alert_state("service:a/b", {"sends": 1})
+    store.save_alert_state("service:a%2Fb", {"sends": 7})
+
+    assert store.load_alert_state("service:a/b") == {"sends": 1}
+    assert store.load_alert_state("service:a%2Fb") == {"sends": 7}
+
+
+def test_a_loaded_alert_state_is_a_copy_not_the_stored_object(store: EvidenceStore) -> None:
+    """A caller mutating what it read (or what it wrote) must not change what
+    the next instance reads, or the in-memory backend would behave unlike the
+    durable one in exactly the case the backoff depends on."""
+    record = {"state": "fault", "sends": 1}
+    store.save_alert_state("a:one", record)
+    record["sends"] = 99
+    store.load_alert_state("a:one")["sends"] = 42
+
+    assert store.load_alert_state("a:one") == {"state": "fault", "sends": 1}
+
+
+def test_alert_state_never_appears_as_a_surface(store: EvidenceStore) -> None:
+    """The board and ``undeclared_surfaces`` are built from
+    ``latest_per_surface``; a send record surfacing there would put the
+    alarm's bookkeeping on the public board as an undeclared surface."""
+    store.append(_evidence(surface="a:one"))
+    store.save_alert_state("a:one", {"state": "fault"})
+    store.save_alert_state("b:never-reported", {"state": "fault"})
+
+    assert set(store.latest_per_surface()) == {"a:one"}
+    assert store.history("b:never-reported") == []
+    assert store.latest("b:never-reported").is_blind

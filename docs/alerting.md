@@ -1,4 +1,4 @@
-# Alerting: the rail, the throttle, and why both are safe
+# Alerting: the rail, the backoff, and why both are safe
 
 DM1.11 built `AlertChannel`: a construction-time refusal to sit on any rail
 deadman watches. It was never wired to anything real. This is the module that
@@ -82,40 +82,95 @@ not refused by it. Declaring the morning brief's real account is the owner's
 decision, and if the alarm shares that account, the deploy will refuse
 to start until the alarm moves to a different one.
 
-## The throttle: a documented window, and one absolute exception
+## The backoff: one incident pages a few times, on any instance
 
-A persistent fault sweeps on every cadence — the morning brief will still be
-dead on sweep two, three, and every sweep after that until someone fixes it.
-Resending an identical alert on every sweep is alarm fatigue by construction,
-so `ThrottledAlertChannel` suppresses a **repeat of the same state** for a
-caller-scoped key within `DEFAULT_THROTTLE_WINDOW` (one hour).
+From 2026-10-09 to 2026-10-11 one ongoing fault sent 39 alert emails in about
+45 hours, roughly one an hour, and all of them sat unread. The repeat throttle
+at the time was one hour long and lived in instance memory, so a Cloud Run
+cold start also forgot it. An alarm that repeats hourly teaches its owner to
+ignore the thread. DM4.1 replaced it with `DurableBackoffAlarm`
+(`src/deadman/scheduled/backoff.py`), which is what
+`deadman.scheduled.alerting.alarm_from_env` now returns and what every
+`POST /self-check` runs.
 
-The one thing it will never suppress: **a state change.** Fault-to-healthy or
-healthy-to-fault always sends immediately, however recently the last alert
-fired for that key. A throttle that could swallow a transition would be worse
-than no throttle at all — silence around the one moment silence is
-unaffordable. `tests/test_transports.py` pins this by flipping state
-mid-window and asserting every message still arrives.
+**The schedule is one constant, `BACKOFF_SCHEDULE`: 6 hours, 12 hours, then
+24 hours.** It is the ops freshness monitor's schedule on purpose.
 
-The production caller, `deadman.scheduled.alerting.evaluate`, only ever
-alerts on bad states, so it tells the throttle about a heal separately:
-`ThrottledAlertChannel.recover(key, message)` clears that key's window and
-sends one recovery notice, but only if the key had alerted (a surface that was
-never in trouble sends nothing, cold start or not). Without that call the
-throttle still held `fault` after a heal, and fault, heal, fault again inside
-the hour was suppressed as a repeat. `tests/test_alarm_refault_after_heal.py`
-pins this end to end through the scheduled endpoint on a fake clock, not on
-the throttle alone.
+| Alert | Sent at | Step |
+|---|---|---|
+| first | 0 h, at once | |
+| repeat 1 | 6 h | 6 h after the first |
+| repeat 2 | 18 h | 12 h after that |
+| repeat 3 | 42 h | 24 h after that |
+| repeat 4 and on | 66 h, 90 h, ... | every 24 h |
 
-```python
-channel = ThrottledAlertChannel(channel=alert_channel)  # window defaults to 1h
-channel.alert("cron:morning-brief", "fault", "no brief sent in 36h")  # sends
-channel.alert(
-    "cron:morning-brief", "fault", "no brief sent in 42h"
-)  # suppressed — same state, inside the window
-channel.alert("cron:morning-brief", "healthy", "brief sent")  # sends — state changed
-channel.recover("cron:morning-brief", "brief recovered")  # resets the window
+A fault held for 48 hours is 4 emails. The old behaviour sent about 40.
+
+**Episodes.** An episode opens when a surface first alerts, or when its alert
+state changes. The first alert of an episode always sends at once. A state
+change inside an open episode (`stale` to `fault`, say) is a new fact: it
+sends on that sweep and restarts the schedule from there. A heal closes the
+episode and sends exactly one recovery notice, and only if the surface had
+alerted; a surface that was never in trouble sends nothing, cold start or
+not. A fault after a heal is a new episode and sends at once, however soon.
+
+**The send record is durable.** What was sent for a surface, and when, is one
+overwritten record per surface in the evidence store, read and written
+through `EvidenceStore.load_alert_state` and `save_alert_state`. On the
+deployed service that is the Firestore document `alert_state/<surface key>`
+(the key is the surface id percent encoded once, the same `surface_key` the
+evidence rows use). It holds `state`, `episode_started_at`, `last_sent_at`,
+`sends` and `open`. The alarm object keeps nothing between calls and reads the
+record on every decision, so an instance that booted a second ago decides
+exactly as a warm one does. The collection is separate from `evidence`, so a
+send record never appears as a row on the board or in `undeclared_surfaces`.
+
+**The decision is "is a repeat due and not yet sent".** The next repeat is due
+one schedule step after the last alert that was actually sent. A sweep that
+arrives late (the 6 h mark missed, the next sweep at 7 h) still sends that
+repeat, once, and the following step is measured from the late send.
+
+**Every alert says when the owner will hear again.** The first alert of an
+episode ends with the next repeat time. A repeat also states how long the
+surface has held the state:
+
+```text
+deadman: service:staging-queue is fault — queue has not drained in 7200s
+
+Still fault: held for 18h, first alerted 2026-10-09 14:00 UTC. This is repeat 2.
+If it does not heal, the next repeat is due 2026-10-11 08:00 UTC (in 1d).
 ```
+
+**What happens when the record itself fails.**
+
+- *It cannot be read or parsed.* The alarm cannot tell whether it already
+  spoke, so it speaks: the alert is sent, its body says repeats are not being
+  limited, a `FAULT` row is appended to the evidence store on
+  `alert:send-record`, and a fresh record is saved (which repairs a malformed
+  document, so one bad record does not page forever). While a backend stays
+  unreadable this sends on every sweep. That is deliberate: loud is the
+  direction to fail in.
+- *It cannot be read for a healthy surface.* No recovery notice is sent,
+  because "recovered" for every healthy surface on every sweep would be an
+  alarm about nothing. The failure is recorded on `alert:send-record`.
+- *It cannot be written.* The alert already went out; the failed write is
+  recorded on `alert:send-record` and the next sweep sends again.
+- *The send itself fails.* Unchanged: recorded on `alert:email`, then raised
+  (next section). The record is written only after a successful send, so an
+  alert that never left is not counted, and the next sweep retries it.
+
+`alert:send-record` and `alert:email` are not declared by any collector, so a
+row on either shows up in the board's `undeclared_surfaces`. That is the only
+place they appear, and it is meant to be seen.
+
+**Known limit.** Two sweeps that overlap (a retried Cloud Scheduler attempt
+racing the original) can both read the record before either writes it, and
+both send. That is one duplicate of a true alarm.
+
+`tests/test_alarm_backoff_schedule.py` pins the schedule with a brand new
+alarm on every sweep, against both store backends;
+`tests/test_service_alarm_wiring.py` pins it through
+`deadman.service.default_scheduled` and an authenticated `POST /self-check`.
 
 ## A transport failure is evidence, not silence
 
@@ -130,17 +185,15 @@ not arrive.
 
 ## Wiring status
 
-This task delivers the pieces — `EmailTransport`, `email_transport_from_env`,
-`real_monitored_surfaces`, `record_transport_failures`,
-`ThrottledAlertChannel` — fully tested. It does not add a call site in
-`src/deadman/service.py`: the file collision matrix in
-`docs/SPRINT-BRIEF-DM2.md` keeps `service.py` out of this task's file list on
-purpose, and the natural call site is DM2.6's scheduled self-check, which
-does not exist yet. `deadman.self_check.run_self_check` still calls
-`channel.alert(message)` directly (DM1.11's shape); routing it through
-`ThrottledAlertChannel.alert(key, state, message)` with a real
-`email_transport_from_env()`-backed `AlertChannel` is DM2.6's wiring, once the
-scheduled cadence that would make throttling matter actually exists.
+Wired. `deadman.service.default_scheduled` builds the alarm with
+`deadman.scheduled.alerting.default_alarm`, and
+`ScheduledSelfCheckEndpoint.handle` runs `evaluate` over every sweep that
+`POST /self-check` triggers. The pieces are `EmailTransport`,
+`email_transport_from_env`, `real_monitored_surfaces`,
+`record_transport_failures` (this module) and `DurableBackoffAlarm`
+(`src/deadman/scheduled/backoff.py`). The daily CLI,
+`deadman.self_check.run_self_check`, still calls `channel.alert(message)`
+directly with no backoff: it runs once a day, which is its own cadence.
 
 ## Verification: confirmed against a real account
 

@@ -1,19 +1,21 @@
-"""Real transport, real throttle, real failure evidence.
+"""Real transport, real failure evidence.
 
 DM1.11 built ``AlertChannel`` with a construction-time refusal to sit on a
 watched rail, but nothing real was ever wired to it: no transport actually
 sent anything, the "monitored" list in its own tests was a hand-typed
 literal, and a failed send had nowhere to go but an exception nobody
-recorded. This suite proves the three real pieces: an email transport over
-the same SMTP rail ``ops/lib/email_send.py`` already uses, the out-of-band
-check running against the actual probe list instead of a retyped copy of it,
-and a throttle that cannot swallow a state change.
+recorded. This suite proves the real pieces: an email transport over the same
+SMTP rail ``ops/lib/email_send.py`` already uses, the out-of-band check
+running against the actual probe list instead of a retyped copy of it, and a
+failed send recorded as evidence before it propagates.
+
+How often a persisting fault repeats is not decided by the transport; see
+``tests/test_alarm_backoff_schedule.py``.
 """
 
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -21,10 +23,8 @@ from deadman.evidence.model import Observation
 from deadman.remediate.alert import AlertChannel, AlertChannelInvalid
 from deadman.remediate.transports import (
     ALERT_TRANSPORT_FAILURE_SURFACE,
-    DEFAULT_THROTTLE_WINDOW,
     EmailTransport,
     EmailTransportNotConfigured,
-    ThrottledAlertChannel,
     email_transport_from_env,
     real_monitored_surfaces,
     record_transport_failures,
@@ -203,57 +203,3 @@ def test_a_successful_send_records_nothing():
 
     assert sent == ["all clear"]
     assert store.latest(ALERT_TRANSPORT_FAILURE_SURFACE).observation is Observation.UNOBSERVABLE
-
-
-def test_repeated_identical_state_is_throttled_within_the_window():
-    sent = []
-    channel = AlertChannel(transport="email:x", send=sent.append, monitored=())
-    throttled = ThrottledAlertChannel(channel=channel, window=timedelta(hours=1))
-    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-
-    throttled.alert("self_check", "stale", "still stale", now=t0)
-    throttled.alert("self_check", "stale", "still stale", now=t0 + timedelta(minutes=5))
-    throttled.alert("self_check", "stale", "still stale", now=t0 + timedelta(minutes=30))
-
-    assert sent == ["still stale"]
-
-
-def test_a_state_change_inside_the_window_is_always_delivered():
-    sent = []
-    channel = AlertChannel(transport="email:x", send=sent.append, monitored=())
-    throttled = ThrottledAlertChannel(channel=channel, window=timedelta(hours=1))
-    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-
-    throttled.alert("self_check", "stale", "gone stale", now=t0)
-    throttled.alert("self_check", "live", "recovered", now=t0 + timedelta(minutes=5))
-    throttled.alert("self_check", "stale", "stale again", now=t0 + timedelta(minutes=8))
-
-    assert sent == ["gone stale", "recovered", "stale again"]
-
-
-def test_an_unchanged_state_resends_once_the_window_elapses():
-    sent = []
-    channel = AlertChannel(transport="email:x", send=sent.append, monitored=())
-    throttled = ThrottledAlertChannel(channel=channel, window=timedelta(hours=1))
-    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-
-    throttled.alert("self_check", "stale", "1", now=t0)
-    throttled.alert("self_check", "stale", "2", now=t0 + timedelta(hours=2))
-
-    assert sent == ["1", "2"]
-
-
-def test_the_throttle_is_keyed_so_two_surfaces_do_not_share_a_window():
-    sent = []
-    channel = AlertChannel(transport="email:x", send=sent.append, monitored=())
-    throttled = ThrottledAlertChannel(channel=channel, window=timedelta(hours=1))
-    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-
-    throttled.alert("disk", "fault", "disk fault", now=t0)
-    throttled.alert("brief", "fault", "brief fault", now=t0)
-
-    assert sent == ["disk fault", "brief fault"]
-
-
-def test_default_throttle_window_is_documented_and_not_instantaneous():
-    assert DEFAULT_THROTTLE_WINDOW >= timedelta(minutes=30)

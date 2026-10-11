@@ -47,14 +47,14 @@ class ScheduledSelfCheckEndpoint:
     secret: str
     window_hours: float = WINDOW_HOURS
     alarm: Alarm | None = None
-    """The throttled alert channel, or ``None`` when ``DEADMAN_ALERT_*`` is
+    """The backoff alarm, or ``None`` when ``DEADMAN_ALERT_*`` is
     unconfigured. Optional follows the ``DEADMAN_COLLECTORS`` precedent — a
     capability gap warns loudly at boot rather than refusing to serve — but
     the response names the gap on every trigger so it cannot be quiet."""
     liveness_fn: Callable[[], LivenessReport | None] | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
-    """The instant the alarm's throttle is judged at. Injected only by tests
-    that must cross a throttle window without sleeping."""
+    """The instant the alarm's backoff is judged at. Injected only by tests
+    that must cross a repeat interval without sleeping."""
 
     def handle(self, environ: dict) -> tuple[str, dict[str, Any]]:
         """``(status, payload)`` for one request. Never raises for bad input."""

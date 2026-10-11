@@ -26,6 +26,14 @@ so :meth:`latest_per_surface` can enumerate surfaces with one collection read;
 a document that existed solely as a subcollection parent would not be returned
 by that query.
 
+**The alert send record lives in its own top-level collection.**
+``alert_state/<surface key>`` holds one overwritten document per alerted
+surface (see :mod:`deadman.scheduled.backoff`). It is deliberately outside
+``evidence``: :meth:`FirestoreEvidenceStore.latest_per_surface` streams that
+collection to enumerate surfaces, and a send record inside it would be
+published on the board as a surface nobody declared. Reads and writes are by
+document id, so this needs no index either.
+
 .. note::
 
    Like the ADK call shape in :mod:`deadman.diagnose.gemini`, the real SDK
@@ -39,6 +47,7 @@ by that query.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -53,6 +62,10 @@ COLLECTION = "evidence"
 
 #: Subcollection beneath each surface document holding the rows themselves.
 ROWS = "rows"
+
+#: Top-level collection holding one alert send record per alerted surface,
+#: keyed by :func:`surface_key`. Separate from :data:`COLLECTION` on purpose.
+ALERT_STATE_COLLECTION = "alert_state"
 
 #: The literal value of ``google.cloud.firestore.Query.DESCENDING``. Spelled
 #: out so ordering does not cost this module a module-scope SDK import.
@@ -85,6 +98,7 @@ class FirestoreEvidenceStore:
 
     project: str | None = None
     collection: str = COLLECTION
+    alert_state_collection: str = ALERT_STATE_COLLECTION
     client: Any = None
     """Injected only by the contract suite. Left ``None`` in the service, so
     the SDK is reached for exactly where the seam says it should be."""
@@ -138,3 +152,17 @@ class FirestoreEvidenceStore:
             if (surface := (snapshot.to_dict() or {}).get("surface"))
         )
         return {surface: self.latest(surface) for surface in surfaces}
+
+    def _alert_state_document(self, key: str) -> Any:
+        """``key`` is a raw surface id and is encoded exactly once, here.
+        Passing an already-encoded id would address a different document."""
+        return self.client.collection(self.alert_state_collection).document(surface_key(key))
+
+    def load_alert_state(self, key: str) -> dict[str, Any] | None:
+        snapshot = self._alert_state_document(key).get()
+        if not snapshot.exists:
+            return None
+        return dict(snapshot.to_dict() or {})
+
+    def save_alert_state(self, key: str, record: Mapping[str, Any]) -> None:
+        self._alert_state_document(key).set(dict(record))

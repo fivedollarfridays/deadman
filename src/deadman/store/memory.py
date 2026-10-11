@@ -12,7 +12,10 @@ the last one.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from deadman.evidence.model import Evidence
 from deadman.store.base import DEFAULT_HISTORY_LIMIT, absent, instant, row_id
@@ -26,6 +29,7 @@ class InMemoryEvidenceStore:
 
     _rows: dict[str, list[Evidence]] = field(default_factory=dict, repr=False)
     _ids: set[str] = field(default_factory=set, repr=False)
+    _alert_state: dict[str, str] = field(default_factory=dict, repr=False)
 
     def append(self, evidence: Evidence) -> None:
         identity = row_id(evidence)
@@ -46,3 +50,13 @@ class InMemoryEvidenceStore:
 
     def latest_per_surface(self) -> dict[str, Evidence]:
         return {surface: self.latest(surface) for surface in sorted(self._rows)}
+
+    def load_alert_state(self, key: str) -> dict[str, Any] | None:
+        stored = self._alert_state.get(key)
+        return None if stored is None else json.loads(stored)
+
+    def save_alert_state(self, key: str, record: Mapping[str, Any]) -> None:
+        """Held as JSON text, not as the caller's object: a durable backend
+        hands back a copy of what was serialised, and the backoff decision
+        must not be able to pass here on aliasing it would not get there."""
+        self._alert_state[key] = json.dumps(dict(record))
