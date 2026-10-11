@@ -224,16 +224,62 @@ credentials, because it asks the deployed service rather than the scheduler:
 
 ```bash
 curl -sS https://deadman-mrapac5nda-uc.a.run.app/ \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['undeclared_surfaces'])"
-# ['self:sweep', 'smoke:deploy-check']
+  | python3 -c "import json,sys; b=json.load(sys.stdin); print(b['self_check']['liveness'], b['undeclared_surfaces'])"
+# live []
 ```
 
+`self_check.liveness` is `live` when the newest `self:sweep` row in the store
+is inside three scheduler intervals, so that word is the store confirming the
+scheduler fired and the write landed.
+
 `undeclared_surfaces` is built from `store.latest_per_surface()` (see
-`src/deadman/verify/collector_liveness.py`), so `self:sweep` appearing there is
-the store confirming it holds self-check evidence. It is listed rather than
-judged there because no collector declares a cadence for it; the judgement,
-against the scheduler's own declared cadence, is the board's `self_check`
-field above.
+`src/deadman/verify/collector_liveness.py`): every surface the store holds
+evidence for that no collector declares. Its expected value is `[]`. The
+service's own `self:sweep` is not listed there (`SERVICE_OWNED_SURFACES`); it
+used to be, which read as a configuration gap for a surface the service
+writes itself and already judges in `self_check`. Anything that does appear
+is one of two things: evidence arriving for a surface nobody declared, or the
+alarm recording its own failure on `alert:email` or `alert:send-record` (see
+`docs/alerting.md`).
+
+### One time: remove the leftover `smoke:deploy-check` row
+
+Before DM4 this check printed `['self:sweep', 'smoke:deploy-check']`.
+`smoke:deploy-check` is a single row posted by hand during the 2026-08-11 end
+to end proof and left in Firestore on purpose at the time. Nothing in this
+repository writes it: no script, no Cloud Build step, no CI job and no
+collector declaration names that surface, so it will not come back after it
+is removed. Until it is removed, `undeclared_surfaces` reads
+`['smoke:deploy-check']`.
+
+Run once, from a machine with `google-cloud-firestore` installed and `gcloud`
+credentials for the project (the same setup as step 3):
+
+```bash
+python3 -c "
+from google.cloud import firestore
+from deadman.store.firestore import COLLECTION, ROWS, surface_key
+
+client = firestore.Client(project='deadman-20260810')
+doc = client.collection(COLLECTION).document(surface_key('smoke:deploy-check'))
+rows = list(doc.collection(ROWS).stream())
+for row in rows:
+    row.reference.delete()
+doc.delete()
+print('deleted', len(rows), 'row(s) and', doc.path)
+"
+```
+
+The rows are deleted before their parent because deleting a Firestore
+document does not delete its subcollections. The document id is the surface
+id percent encoded once, `smoke%3Adeploy-check`, and `surface_key` computes
+it, so the snippet never spells it. If you address the document by URL
+instead (the REST API or the console), the `%` in that id must itself be
+encoded, which makes the path segment `smoke%253Adeploy-check`; the single
+encoded form in a URL addresses a document called `smoke:deploy-check`, which
+does not exist, and the delete reports success having removed nothing.
+
+Then run the `curl` above again and read `[]`.
 
 This section previously said steps 1–3 were documented but not executed. That
 was true when it was written and stopped being true in DM2.6; a runbook whose

@@ -73,6 +73,13 @@ COLLECTORS_ENV = "DEADMAN_COLLECTORS"
 #: where the log cannot exist and the surface arrives via ingest instead.
 BRIEF_LOG_ENV = "DEADMAN_BRIEF_LOG"
 
+#: Where the in-process disk probe appends its trend samples. Set empty to
+#: drop the probe from this process entirely, the same explicit opt-out as
+#: :data:`BRIEF_LOG_ENV`: on Cloud Run the probe measures the container's own
+#: ephemeral disk, which is true and useless, and the real disk arrives via
+#: ingest as ``host:mac/disk``.
+DISK_HISTORY_ENV = "DEADMAN_DISK_HISTORY"
+
 
 _METHOD_NOT_ALLOWED = "405 Method Not Allowed"
 
@@ -86,13 +93,15 @@ def default_probes() -> list[Probe]:
     outbound network. Everything else (Metricool, destinations, SMS relay)
     needs secrets this endpoint does not hold."""
     brief_log = os.environ.get(BRIEF_LOG_ENV, "/var/log/deadman/morning-brief.jsonl")
-    disk_history = Path(os.environ.get("DEADMAN_DISK_HISTORY", "/tmp/deadman/disk-history.jsonl"))
-    probes: list[Probe] = [DiskProbe(history_path=disk_history)]
+    disk_history = os.environ.get(DISK_HISTORY_ENV, "/tmp/deadman/disk-history.jsonl")
+    probes: list[Probe] = []
+    # For both: empty means deliberately disabled, not defaulted. A probe that
+    # can only ever describe the container it runs in (its empty disk, a log
+    # that cannot exist there) puts a row on the board without watching
+    # anything, and the real surface arrives from a collector instead.
+    if disk_history:
+        probes.append(DiskProbe(history_path=Path(disk_history)))
     if brief_log:
-        # Empty means deliberately disabled, not defaulted: a deploy where the
-        # log cannot exist gets its brief evidence from a collector, and a
-        # probe that can only ever answer "unobservable" adds a permanent
-        # blind spot to the board without watching anything.
         probes.append(MorningBriefProbe(log_path=Path(brief_log)))
     return probes
 
