@@ -139,3 +139,17 @@ def test_a_heal_through_the_deployed_wiring_sends_one_recovery_per_surface(outbo
         f"deadman: {SURFACE} recovered",
     ]
     assert {hours for hours, _ in sent} == {0}
+
+
+def test_the_alarm_is_checked_against_the_probe_list_the_board_really_sweeps(outbox, store):
+    """``default_alarm`` takes the service's own surfaces from
+    ``real_monitored_surfaces``, the one reader of ``default_probes``, so a
+    probe added to the board is out of bounds for the alarm with no second
+    list to update."""
+    from deadman.remediate.transports import real_monitored_surfaces
+
+    alarm = service.default_scheduled(store, EXPECTATIONS).alarm
+    swept = [probe.surface for probe in service.default_probes()]
+
+    assert real_monitored_surfaces() == swept == ["host:disk/"]
+    assert list(alarm.channel.monitored)[: len(swept)] == swept

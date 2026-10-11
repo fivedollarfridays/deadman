@@ -161,3 +161,77 @@ def test_a_refault_after_a_recovery_notice_that_failed_to_send_still_alerts(outb
     sweep()
 
     assert [body.count(f"{SURFACE} is fault") > 0 for body in outbox] == [True, True]
+
+
+class _FlakySendRecord(InMemoryEvidenceStore):
+    """Reads fail while ``reads_fail`` is set; writes are counted."""
+
+    reads_fail = False
+    writes = 0
+
+    def load_alert_state(self, key: str):
+        if self.reads_fail:
+            raise OSError("send record backend unavailable")
+        return super().load_alert_state(key)
+
+    def save_alert_state(self, key: str, record) -> None:
+        self.writes += 1
+        super().save_alert_state(key, record)
+
+
+def test_a_transient_read_failure_during_a_heal_does_not_lose_the_recovery_notice(outbox):
+    """The episode is real and open. One failed read on the heal sweep must
+    leave it exactly as it was, so the next healthy sweep sends the notice."""
+    store = _FlakySendRecord()
+    clock = Clock()
+    probe = StaticProbe(SURFACE, Observation.FAULT)
+
+    def sweep() -> None:
+        production_endpoint([probe], clock=clock, monitored=MONITORED, store=store).handle(
+            dict(AUTHORIZED)
+        )
+        clock.advance(15)
+
+    sweep()
+    opened = store.load_alert_state(SURFACE)
+    writes_before = store.writes
+
+    probe.observation, store.reads_fail = Observation.HEALTHY, True
+    sweep()
+
+    store.reads_fail = False
+    assert [body for body in outbox if "recovered" in body] == []
+    assert store.writes == writes_before
+    assert store.load_alert_state(SURFACE) == opened
+    (failure,) = store.history(ALERT_STATE_FAILURE_SURFACE)
+    assert failure.detail["key"] == SURFACE
+    assert failure.detail["operation"] == "read"
+
+    sweep()
+    sweep()
+
+    recoveries = [body for body in outbox if "recovered" in body]
+    assert len(recoveries) == 1, outbox
+    assert store.load_alert_state(SURFACE)["open"] is False
+
+
+def test_a_malformed_record_on_a_healthy_surface_never_mails_and_is_left_alone(outbox):
+    """It sends nothing, on any sweep: no page, no recovery notice. Each sweep
+    records the failure; the record is repaired the next time the surface
+    alerts, which is the first moment it matters."""
+    store = InMemoryEvidenceStore()
+    malformed = {"state": "fault", "sends": "many"}
+    store.save_alert_state(SURFACE, malformed)
+
+    sent = _cold_sweeps(store, outbox, Observation.HEALTHY, hours=1)
+
+    assert sent == []
+    assert store.load_alert_state(SURFACE) == malformed
+    failures = store.history(ALERT_STATE_FAILURE_SURFACE)
+    assert len(failures) == 5
+    assert {f.detail["operation"] for f in failures} == {"read"}
+
+    repaired = _cold_sweeps(store, outbox, Observation.FAULT, hours=0.5)
+
+    assert [hours for hours, _ in repaired] == [0]
+    assert store.load_alert_state(SURFACE)["open"] is True

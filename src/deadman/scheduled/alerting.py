@@ -44,7 +44,11 @@ from typing import Protocol
 
 from deadman.evidence.model import Evidence, Observation
 from deadman.remediate.alert import AlertChannel
-from deadman.remediate.transports import email_transport_from_env, record_transport_failures
+from deadman.remediate.transports import (
+    email_transport_from_env,
+    real_monitored_surfaces,
+    record_transport_failures,
+)
 from deadman.scheduled.backoff import DurableBackoffAlarm
 from deadman.store.base import EvidenceStore
 from deadman.verify.collector_liveness import LivenessReport, collector_surface
@@ -183,11 +187,13 @@ def default_alarm(store: EvidenceStore) -> DurableBackoffAlarm | None:
     scheduled trigger's response also carries ``alerting: unconfigured``, so
     the gap is visible on the job Cloud Scheduler is already watching.
 
-    ``monitored`` is the real list — the declared collector surfaces, their
-    collector rails, and the service's own probes — so wiring the alarm onto
-    a watched rail dies here at startup, not at the moment it is needed. The
-    service import is lazy for the same reason ``real_monitored_surfaces``'s
-    is: this module must stay importable without the service's env.
+    ``monitored`` is the real list — the service's own probes, read by
+    :func:`~deadman.remediate.transports.real_monitored_surfaces` from the
+    exact probe list the board sweeps, plus the declared collector surfaces
+    and their collector rails — so wiring the alarm onto a watched rail dies
+    here at startup, not at the moment it is needed. The service import is
+    lazy for the same reason ``real_monitored_surfaces``'s is: this module
+    must stay importable without the service's env.
 
     **An alarm that is not out of band is not caught here.** Only
     :class:`AlarmUnconfigured` degrades to ``None``; ``AlertChannelInvalid``
@@ -197,10 +203,10 @@ def default_alarm(store: EvidenceStore) -> DurableBackoffAlarm | None:
     """
     import sys
 
-    from deadman.service import default_expectations, default_probes
+    from deadman.service import default_expectations
 
     expectations = default_expectations()
-    monitored = [probe.surface for probe in default_probes()]
+    monitored = real_monitored_surfaces()
     transports: dict[str, str] = {}
     for expectation in expectations:
         monitored.append(collector_surface(expectation.collector_id))

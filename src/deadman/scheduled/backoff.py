@@ -33,10 +33,16 @@ would mark an alert as delivered that never left.
 **An unreadable record means send.** If the record cannot be read or parsed
 the alarm cannot know whether it already spoke, so it speaks: the alert is
 sent, says in its body that repeats are not being limited, and the failure is
-recorded as evidence on :data:`ALERT_STATE_FAILURE_SURFACE`. The one thing an
-unreadable record never produces is a recovery notice, because "recovered"
-mailed for every healthy surface on every sweep would be an alarm about
-nothing; that failure is recorded as evidence instead.
+recorded as evidence on :data:`ALERT_STATE_FAILURE_SURFACE`. The save that
+follows replaces a malformed record with a good one.
+
+**On a heal, an unreadable record is left untouched.** "Recovered" mailed for
+every healthy surface on every sweep would be an alarm about nothing, so no
+notice is sent; the failure is recorded as evidence and nothing is written.
+A transient read error therefore costs one sweep of delay, never the notice:
+the episode is still open when the next healthy sweep reads it. A malformed
+record on a healthy surface stays as it is, mails nobody, and is repaired the
+next time that surface alerts.
 """
 
 from __future__ import annotations
@@ -185,13 +191,20 @@ class DurableBackoffAlarm:
         never alerted sends nothing however many instances start cold. The
         episode is closed *before* the notice goes out: a re-fault after a
         heal is a new episode even if the notice itself fails to send.
+
+        **A record that cannot be read is left exactly as it is.** The failure
+        is recorded as evidence and nothing is written, so a transient read
+        error cannot destroy a real open episode: the next healthy sweep reads
+        it and sends the one recovery notice. A record that is malformed, and
+        so never reads, sends no mail on a healthy surface however long it
+        stays that way (one evidence row per sweep); it is repaired the next
+        time that surface alerts, by :meth:`alert`.
         """
         moment = instant(now or datetime.now(timezone.utc))
         try:
             prior = self._load(key)
         except Exception as exc:  # noqa: BLE001 - recorded below, never swallowed
             self._record_failure(key, "read", exc, moment)
-            self._save(key, SendRecord("unknown", moment, moment, sends=1, open=False), moment)
             return False
         if prior is None or not prior.open:
             return False

@@ -152,7 +152,12 @@ If it does not heal, the next repeat is due 2026-10-11 08:00 UTC (in 1d).
   direction to fail in.
 - *It cannot be read for a healthy surface.* No recovery notice is sent,
   because "recovered" for every healthy surface on every sweep would be an
-  alarm about nothing. The failure is recorded on `alert:send-record`.
+  alarm about nothing. The failure is recorded on `alert:send-record` and the
+  stored record is left exactly as it was. A transient read error therefore
+  delays the recovery notice by one sweep and never loses it: the episode is
+  still open when the next healthy sweep reads it. A malformed record on a
+  healthy surface mails nobody for as long as it stays that way (one evidence
+  row per sweep) and is repaired the next time that surface alerts.
 - *It cannot be written.* The alert already went out; the failed write is
   recorded on `alert:send-record` and the next sweep sends again.
 - *The send itself fails.* Unchanged: recorded on `alert:email`, then raised
